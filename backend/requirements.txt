@@ -5,3 +5,7 @@ networkx
 pandas
 numpy
 scikit-learn
+python-multipart
+pypdf
+joblib
+scipy

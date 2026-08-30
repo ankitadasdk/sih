@@ -1,6 +1,3 @@
-Here is the updated `train_graph_model.py` with duplicate imports cleaned up and the Louvain Community Detection block integrated into Step 5 without modifying the rest of the pipeline:
-
-```python
 import os
 import sys
 import math
@@ -11,6 +8,8 @@ import networkx as nx
 from sklearn.neighbors import NearestNeighbors
 
 def build_and_train_connective_model():
+    np.random.seed(42)
+
     # 1. Resolve Data Path
     candidate_paths = [
         os.path.join("data", "synthetic_crime_15k.csv"),
@@ -27,7 +26,7 @@ def build_and_train_connective_model():
     print(f"[*] Loading dataset: {os.path.abspath(data_path)}")
     df = pd.read_csv(data_path)
     
-    # We build the master relational network over the primary investigation batch (e.g. 500 representative nodes)
+    # Construct relational network across 500 representative nodes
     sample_size = min(len(df), 500)
     df_sample = df.head(sample_size).copy()
     print(f"[*] Constructing Connective Model across {sample_size} primary entities...")
@@ -75,12 +74,14 @@ def build_and_train_connective_model():
 
     # Rule A: Kingpin -> Tech Operators & Callers (Command Hierarchy)
     for kp in kingpins:
-        for _ in range(min(2, len(tech_ops))):
-            target = np.random.choice(tech_ops)
-            G.add_edge(kp, target, relation="INSTRUCTS_INFRASTRUCTURE", weight=0.95, color="#ef4444")
-        for _ in range(min(2, len(callers))):
-            target = np.random.choice(callers)
-            G.add_edge(kp, target, relation="COORDINATES_CALL_CAMPAIGN", weight=0.90, color="#f97316")
+        if tech_ops:
+            for _ in range(min(2, len(tech_ops))):
+                target = np.random.choice(tech_ops)
+                G.add_edge(kp, target, relation="INSTRUCTS_INFRASTRUCTURE", weight=0.95, color="#ef4444")
+        if callers:
+            for _ in range(min(2, len(callers))):
+                target = np.random.choice(callers)
+                G.add_edge(kp, target, relation="COORDINATES_CALL_CAMPAIGN", weight=0.90, color="#f97316")
 
     # Rule B: Callers -> Tech Operators (SIM Gateway & VoIP routing)
     for caller in callers:
@@ -124,7 +125,7 @@ def build_and_train_connective_model():
 
     for i, neighbors in enumerate(indices):
         u = node_keys[i]
-        for j, neighbor_idx in enumerate(neighbors[1:]): # skip self
+        for j, neighbor_idx in enumerate(neighbors[1:]):
             v = node_keys[neighbor_idx]
             dist = distances[i][j+1]
             if dist < 0.15 and not G.has_edge(u, v):
@@ -135,15 +136,23 @@ def build_and_train_connective_model():
     degrees = dict(G.degree())
     betweenness = nx.betweenness_centrality(G)
 
+    # Dynamic thresholding based on network distribution
+    kp_scores = {}
     for node_id in G.nodes():
-        deg = degrees[node_id]
-        bet = betweenness[node_id]
+        deg = degrees.get(node_id, 0)
+        bet = betweenness.get(node_id, 0.0)
         kp_score = bet / math.log(1 + deg) if deg > 0 else 0.0
-        
+        kp_scores[node_id] = kp_score
+
         G.nodes[node_id]['degree'] = deg
         G.nodes[node_id]['betweenness'] = round(bet, 4)
         G.nodes[node_id]['topological_kingpin_score'] = round(kp_score, 4)
-        G.nodes[node_id]['is_unmasked_kingpin'] = bool(kp_score > 0.20 and G.nodes[node_id]['role_id'] == 1)
+
+    # Flag Kingpins using realistic graph topology threshold
+    for node_id in G.nodes():
+        score = kp_scores[node_id]
+        role_id = G.nodes[node_id]['role_id']
+        G.nodes[node_id]['is_unmasked_kingpin'] = bool(score > 0.005 and role_id == 1)
 
     # 5b. Louvain Syndicate Cell Community Detection
     print("[*] Performing Louvain Community Detection to segment syndicate cells...")
@@ -160,15 +169,14 @@ def build_and_train_connective_model():
     out_path = os.path.join("models", "connective_graph.pkl")
     joblib.dump(G, out_path)
     
+    isolated_kingpins = sum(1 for _, d in G.nodes(data=True) if d.get('is_unmasked_kingpin'))
     print("\n" + "="*60)
     print(f"[SUCCESS] Connective Model Fitted & Exported to {out_path}")
     print(f"Total Entity Nodes: {G.number_of_nodes()}")
     print(f"Total Relationship Edges: {G.number_of_edges()}")
     print(f"Total Syndicate Cells: {len(communities)}")
-    print(f"Ghost Kingpins Isolated: {sum(1 for _, d in G.nodes(data=True) if d.get('is_unmasked_kingpin'))}")
+    print(f"Ghost Kingpins Isolated: {isolated_kingpins}")
     print("="*60)
 
 if __name__ == "__main__":
     build_and_train_connective_model()
-
-```

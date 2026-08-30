@@ -1,0 +1,130 @@
+import os
+import joblib
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+
+ROLE_MAPPING = {
+    0: "Civilian / Uninvolved",
+    1: "Ghost Kingpin",
+    2: "Vishing Caller",
+    3: "Tech Enabler",
+    4: "Money Mule",
+    5: "Field Cashier"
+}
+
+def generate_synthetic_syndicate_data(n_samples: int = 12000) -> pd.DataFrame:
+    """
+    Synthesizes multi-modal behavioral, telephony, financial, and graph telemetry.
+    """
+    np.random.seed(42)
+    records = []
+
+    for _ in range(n_samples):
+        role = np.random.choice([0, 1, 2, 3, 4, 5], p=[0.35, 0.05, 0.20, 0.10, 0.20, 0.10])
+        
+        # 1. Baseline Features
+        betweenness_centrality = np.random.uniform(0.0, 0.02)
+        degree = np.random.randint(1, 4)
+        night_call_ratio = np.random.uniform(0.01, 0.15)
+        call_burst_frequency = np.random.uniform(1.0, 5.0)
+        sim_swap_count = np.random.randint(1, 2)
+        imei_churn_rate = np.random.uniform(0.0, 0.1)
+        voip_proxy_ratio = np.random.uniform(0.0, 0.05)
+        transit_velocity_mins = np.random.uniform(120, 1440)
+        fan_in_account_ratio = np.random.uniform(0.0, 0.1)
+        atm_cashout_velocity = np.random.uniform(0.0, 0.1)
+        unauthorized_exposure_inr = np.random.uniform(0, 50000)
+        fastag_crossings = np.random.randint(0, 2)
+        
+        # 2. Inject Role-Specific Behavioral Signatures
+        if role == 1:  # Ghost Kingpin
+            betweenness_centrality = np.random.uniform(0.18, 0.95)
+            degree = np.random.randint(2, 6) # Low-to-moderate direct degree
+            unauthorized_exposure_inr = np.random.uniform(5000000, 50000000)
+            voip_proxy_ratio = np.random.uniform(0.60, 0.99)
+            sim_swap_count = np.random.randint(2, 5)
+            
+        elif role == 2:  # Vishing Caller
+            night_call_ratio = np.random.uniform(0.50, 0.95)
+            call_burst_frequency = np.random.uniform(40.0, 150.0)
+            degree = np.random.randint(8, 30)
+            voip_proxy_ratio = np.random.uniform(0.40, 0.90)
+            
+        elif role == 3:  # Tech Enabler
+            sim_swap_count = np.random.randint(6, 25)
+            imei_churn_rate = np.random.uniform(0.70, 1.0)
+            degree = np.random.randint(5, 18)
+            voip_proxy_ratio = np.random.uniform(0.75, 1.0)
+            
+        elif role == 4:  # Money Mule
+            transit_velocity_mins = np.random.uniform(0.5, 9.5) # Under 10 mins
+            fan_in_account_ratio = np.random.uniform(0.65, 0.99)
+            unauthorized_exposure_inr = np.random.uniform(500000, 10000000)
+            betweenness_centrality = np.random.uniform(0.05, 0.25)
+            
+        elif role == 5:  # Field Cashier
+            atm_cashout_velocity = np.random.uniform(0.70, 1.0)
+            fastag_crossings = np.random.randint(4, 15)
+            transit_velocity_mins = np.random.uniform(5.0, 30.0)
+            unauthorized_exposure_inr = np.random.uniform(100000, 2000000)
+
+        records.append({
+            "betweenness_centrality": betweenness_centrality,
+            "degree": degree,
+            "night_call_ratio": night_call_ratio,
+            "call_burst_frequency": call_burst_frequency,
+            "sim_swap_count": sim_swap_count,
+            "imei_churn_rate": imei_churn_rate,
+            "voip_proxy_ratio": voip_proxy_ratio,
+            "transit_velocity_mins": transit_velocity_mins,
+            "fan_in_account_ratio": fan_in_account_ratio,
+            "atm_cashout_velocity": atm_cashout_velocity,
+            "unauthorized_exposure_inr": unauthorized_exposure_inr,
+            "fastag_crossings": fastag_crossings,
+            "syndicate_role": role
+        })
+
+    return pd.DataFrame(records)
+
+def train_and_export_suspicion_model():
+    print("[*] Generating Multi-Modal Syndicate Telemetry...")
+    df = generate_synthetic_syndicate_data(15000)
+
+    feature_cols = [
+        "betweenness_centrality", "degree", "night_call_ratio", 
+        "call_burst_frequency", "sim_swap_count", "imei_churn_rate", 
+        "voip_proxy_ratio", "transit_velocity_mins", "fan_in_account_ratio", 
+        "atm_cashout_velocity", "unauthorized_exposure_inr", "fastag_crossings"
+    ]
+
+    X = df[feature_cols]
+    y = df["syndicate_role"]
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
+    print("[*] Training HistGradientBoostingClassifier (Suspicion Engine)...")
+    clf = HistGradientBoostingClassifier(
+        max_iter=200,
+        learning_rate=0.08,
+        max_leaf_nodes=31,
+        random_state=42
+    )
+    clf.fit(X_train, y_train)
+
+    y_pred = clf.predict(X_test)
+    print("\n" + classification_report(y_test, y_pred, target_names=list(ROLE_MAPPING.values())))
+
+    os.makedirs("models", exist_ok=True)
+    model_artifact = {
+        "model": clf,
+        "features": feature_cols,
+        "role_mapping": ROLE_MAPPING
+    }
+    joblib.dump(model_artifact, "models/suspicion_engine.pkl")
+    print("[+] Successfully exported pipeline to 'models/suspicion_engine.pkl'")
+
+if __name__ == "__main__":
+    train_and_export_suspicion_model()
