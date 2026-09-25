@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Depends, status
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.concurrency import run_in_threadpool
 from jose import JWTError, jwt
 
 from app.api.auth import SECRET_KEY, ALGORITHM
@@ -128,8 +129,8 @@ async def ingest_fir(
         if file.filename.lower().endswith((".docx", ".doc")) and not content.startswith(b"PK\x03\x04"):
             raise HTTPException(status_code=400, detail="Corrupt or invalid DOCX archive header.")
 
-        # Text extraction and SHA-3 (256-bit) cryptographic digest
-        extracted_text, doc_sha3 = DocumentParserService.extract_text(content, file.filename)
+        # Text extraction and SHA-3 (256-bit) cryptographic digest offloaded to threadpool
+        extracted_text, doc_sha3 = await run_in_threadpool(DocumentParserService.extract_text, content, file.filename)
 
         if not extracted_text:
             raise HTTPException(
@@ -147,16 +148,17 @@ async def ingest_fir(
             officer_id=current_officer.get("username", "POLICE_NCRB_OFFICER_01")
         )
 
-        # Entity, item context, and chronological incident date extraction
-        structured_entities = nlp_service.extract_structured_regex(extracted_text)
-        named_entities = nlp_service.extract_named_entities(extracted_text)
+        # Entity, item context, and chronological incident date extraction offloaded to threadpool
+        structured_entities = await run_in_threadpool(nlp_service.extract_structured_regex, extracted_text)
+        named_entities = await run_in_threadpool(nlp_service.extract_named_entities, extracted_text)
         
         # Safe extraction whether the method is extract_case_dates or extract_dates_and_times
         date_extractor = getattr(nlp_service, "extract_dates_and_times", getattr(nlp_service, "extract_case_dates", None))
-        case_timeline = date_extractor(extracted_text) if date_extractor else []
+        case_timeline = await run_in_threadpool(date_extractor, extracted_text) if date_extractor else []
 
-        # Construct nodes and relationship links (safe unpacking for 2 or 3 items)
-        raw_nodes, raw_links, *timeline_events = nlp_service.build_network_triplets(
+        # Construct nodes and relationship links offloaded to threadpool
+        raw_nodes, raw_links, *timeline_events = await run_in_threadpool(
+            nlp_service.build_network_triplets,
             text=extracted_text,
             structured=structured_entities,
             named=named_entities,
@@ -189,8 +191,9 @@ async def ingest_fir(
                 "page": ev.get("page", "Page 1")
             })
 
-        graph_service.construct_graph(raw_nodes, raw_links)
-        analytics_result = graph_service.analyze_and_score()
+        await run_in_threadpool(graph_service.construct_graph, raw_nodes, raw_links)
+        analytics_result = await run_in_threadpool(graph_service.analyze_and_score)
+        
         analytics_result["case_timeline"] = normalized_timeline
 
         # Dispatch background OSINT & Govt DB lookup
