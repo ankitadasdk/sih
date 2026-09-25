@@ -3,11 +3,16 @@ import hashlib
 import unicodedata
 from datetime import datetime
 from typing import Dict, Any, List, Tuple
-from gliner import GLiNER
 
 class NLPExtractorService:
     def __init__(self, model_name: str = "urchade/gliner_multi-v2.1"):
-        self.model = GLiNER.from_pretrained(model_name)
+        self.model = None
+        try:
+            from gliner import GLiNER
+            self.model = GLiNER.from_pretrained(model_name)
+            print("GLiNER model loaded successfully.")
+        except Exception as e:
+            print(f"Skipping heavy GLiNER model to save memory. Using Regex engine only. Error: {e}")
         
         # Comprehensive multilingual labels (including universal NER labels 'person' and 'व्यक्ति')
         self.target_labels = [
@@ -70,7 +75,9 @@ class NLPExtractorService:
 
     def extract_named_entities(self, text: str) -> Dict[str, List[str]]:
         result = {"suspect": [], "alias": [], "accomplice": [], "weapon": [], "vehicle": []}
-        if not text or not text.strip():
+        
+        # If the heavy model isn't loaded, just return empty and let regex handle it
+        if not text or not text.strip() or not self.model:
             return result
 
         has_devanagari = any('\u0900' <= char <= '\u097f' for char in text)
