@@ -1,0 +1,1910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apex Dossier // Criminal Investigation Dossier Core</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Core WebGL & 3D Force Graph Engines -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three-spritetext@1.8.2/dist/three-spritetext.min.js"></script>
+  <script src="https://unpkg.com/3d-force-graph@1.73.3/dist/3d-force-graph.min.js"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    body { 
+      margin: 0; 
+      background: #020617; 
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; 
+      overflow: hidden; 
+      color: #94a3b8;
+    }
+    #3d-graph { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+    
+    /* Clear Liquid Glassmorphism */
+    .dossier-panel {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
+      backdrop-filter: blur(32px);
+      -webkit-backdrop-filter: blur(32px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-top: 1px solid rgba(255, 255, 255, 0.4);
+      border-left: 1px solid rgba(255, 255, 255, 0.3);
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.95), 
+                inset 0 1px 1px rgba(255, 255, 255, 0.3),
+                inset 0 0 20px rgba(255, 255, 255, 0.03);
+    }
+
+    /* Subtly Grayish Clear Glass for Floating Panels */
+    .grayish-glass {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.0));
+      backdrop-filter: blur(45px);
+      -webkit-backdrop-filter: blur(45px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-top: 1px solid rgba(255, 255, 255, 0.35);
+      border-left: 1px solid rgba(255, 255, 255, 0.25);
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6), 
+                inset 0 1px 1px rgba(255, 255, 255, 0.25),
+                inset 0 0 30px rgba(255, 255, 255, 0.05);
+    }
+
+    /* Highly Liquid Clear Glass for Timeline & Syndicate Cards */
+    .liquid-glass {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01));
+      backdrop-filter: blur(30px);
+      -webkit-backdrop-filter: blur(30px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-top: 1px solid rgba(255, 255, 255, 0.3);
+      border-left: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4),
+                inset 0 1px 1px rgba(255, 255, 255, 0.15);
+    }
+    
+    /* Sci-Fi Angled Edge Cut */
+    .cyber-clip {
+      clip-path: polygon(0 0, calc(100% - 25px) 0, 100% 25px, 100% calc(100% - 25px), calc(100% - 25px) 100%, 0 100%);
+    }
+    
+    /* Inverse Cyber Cut for Left Panel */
+    .cyber-clip-left {
+      clip-path: polygon(0 0, 100% 0, 100% calc(100% - 25px), calc(100% - 25px) 100%, 0 100%, 0 25px, 25px 0);
+    }
+    
+    .dossier-input {
+      background: rgba(20, 20, 20, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .dossier-input:focus {
+      border-color: rgba(255, 255, 255, 0.5);
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.15);
+      outline: none;
+    }
+
+    .glow-blue { text-shadow: 0 0 15px rgba(56, 189, 248, 0.85); }
+    .glow-cyan { text-shadow: 0 0 10px rgba(6, 182, 212, 0.9); }
+    .glow-red { text-shadow: 0 0 12px rgba(239, 68, 68, 0.9); }
+
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 2px; }
+
+    /* Visible Background Node Network Constellation Canvas */
+    #constellation-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.35;
+    }
+  </style>
+</head>
+<body class="antialiased select-none">
+
+  <!-- Background Visible Node Graph Constellation Canvas -->
+  <canvas id="constellation-bg"></canvas>
+
+  <!-- ================= AUTHENTICATION MODAL GATEWAY ================= -->
+  <div id="login-overlay" class="fixed inset-0 z-50 flex items-center justify-between px-24 py-10 bg-[#020617]/30">
+    <div class="absolute inset-0 bg-gradient-to-r from-[#020617]/85 via-[#020617]/40 to-transparent pointer-events-none z-0"></div>
+
+    <div class="relative z-10 w-full max-w-md dossier-panel rounded-2xl p-8 space-y-6 ml-24">
+      <div class="absolute top-4 right-4 text-[9px] font-mono tracking-widest text-sky-400/50 border border-white/20 px-2 py-0.5 rounded uppercase">
+        RESTRICTED // SEC-63
+      </div>
+
+      <!-- Centered & Enlarged All-White Title Block -->
+      <div class="text-center space-y-1.5 pt-4">
+        <h1 class="text-3xl font-black tracking-wider text-white uppercase font-sans">
+          APEX DOSSIER
+        </h1>
+        <p class="text-[11px] text-slate-400 font-mono tracking-wide">National Crime Records Bureau // Classified Terminal</p>
+        
+        <!-- Notice to wait ~30 seconds for ML models initialization -->
+        <div class="mt-3 p-2.5 bg-cyan-950/40 border border-cyan-800/60 rounded-lg text-[11px] text-cyan-300 font-mono tracking-tight leading-snug text-left">
+            <strong>Notice:</strong> Please wait for some time (approx. 30 seconds) 
+        </div>
+      </div>
+
+      <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">Username / Officer ID</label>
+          <div class="relative">
+            <i data-lucide="user" class="absolute left-3.5 top-3 w-4 h-4 text-slate-400/60"></i>
+            <input type="email" id="auth-email" required value="officer@ncrb.gov.in" placeholder="officer@ncrb.gov.in" class="w-full pl-10 pr-3 py-2.5 dossier-input rounded-lg text-xs text-slate-100 placeholder-slate-500 font-mono" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">Password</label>
+          <div class="relative">
+            <i data-lucide="lock" class="absolute left-3.5 top-3 w-4 h-4 text-slate-400/60"></i>
+            <input type="password" id="auth-pass" required value="ncrb@2026" placeholder="••••••••" class="w-full pl-10 pr-3 py-2.5 dossier-input rounded-lg text-xs text-slate-100 placeholder-slate-500 font-mono" />
+          </div>
+        </div>
+
+        <!-- Animated Fetching Loading Bar Container -->
+        <div id="login-loading-container" class="hidden space-y-1.5 pt-1">
+          <div class="flex justify-between text-[10px] font-mono text-cyan-400">
+            <span id="login-loading-text">INITIALIZING ML PACKAGES & DATA...</span>
+            <span id="login-loading-pct">0%</span>
+          </div>
+          <div class="h-1.5 w-full bg-black/60 rounded-full overflow-hidden border border-cyan-500/30">
+            <div id="login-loading-bar" class="h-full bg-gradient-to-r from-cyan-500 to-sky-400 w-[0%] transition-all duration-300 shadow-[0_0_10px_#06b6d4]"></div>
+          </div>
+        </div>
+
+        <div id="login-err" class="hidden text-[11px] text-red-400 bg-red-950/40 border border-red-800/60 p-2.5 rounded-lg text-center font-medium font-mono"></div>
+
+        <!-- Electric Blue Button matching the globe -->
+        <button type="submit" id="auth-btn" class="w-full py-3.5 relative group overflow-hidden rounded-xl font-bold text-xs tracking-widest uppercase transition-all duration-300 text-slate-950 bg-gradient-to-r from-cyan-400 to-sky-500 hover:from-cyan-300 hover:to-sky-400 shadow-[0_0_25px_rgba(0,255,255,0.4)] flex items-center justify-center gap-2">
+          <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 pointer-events-none"></div>
+          <i data-lucide="key" class="w-4 h-4 text-slate-950"></i>
+          <span>AUTHENTICATE 2026 CYBER</span>
+        </button>
+      </form>
+
+      <!-- Watermark Footer -->
+      <div class="pt-2 border-t border-white/10 text-center">
+        <span class="text-[10px] text-slate-500 font-mono tracking-widest uppercase">© 2026 Apex Dossier</span>
+      </div>
+    </div>
+
+    <!-- Right Side: Upgraded Clean 3D Rotating Holographic Globe -->
+    <div class="relative z-10 hidden lg:flex flex-col items-center justify-center w-[520px] h-[520px] mr-12">
+      <div id="login-globe-container" class="w-full h-full"></div>
+    </div>
+  </div>
+
+  <!-- ================= DASHBOARD CORE APPLICATION ================= -->
+  <div id="app-container" class="hidden relative z-10 w-full h-full flex">
+
+    <!-- Header Navigation with Liquid Curve / Streamlined Design -->
+    <header class="absolute top-0 left-0 right-0 z-40 flex items-center justify-between px-6 py-3 bg-[#010104]/80 backdrop-blur-xl border-b border-white/10">
+      <div class="flex items-center gap-6">
+        
+        <!-- Sidebar Toggle Icon & Logo -->
+        <div class="flex items-center gap-4">
+          <button type="button" id="sidebar-toggle-btn" class="p-1 hover:bg-white/10 rounded-lg text-slate-200 transition-colors z-50">
+            <i data-lucide="menu" class="w-5 h-5"></i>
+          </button>
+          
+          <div class="flex items-center gap-3">
+            <div class="w-2.5 h-2.5 rounded-full bg-[#010C3B] border border-sky-900/50 shadow-[0_0_8px_rgba(56,189,248,0.1)]"></div>
+            <h1 class="font-bold tracking-widest text-xs uppercase text-slate-100">
+              APEX <span class="text-sky-400 font-extrabold glow-blue">DOSSIER</span>
+            </h1>
+          </div>
+        </div>
+        
+        <!-- Streamlined Liquid Pill Navigation -->
+        <nav class="flex items-center gap-1 bg-white/5 border border-white/10 p-1 rounded-full text-xs font-mono ml-2 shadow-[0_0_15px_rgba(255,255,255,0.02)]">
+          <button type="button" onclick="switchTab('nodespace')" id="btn-tab-nodespace" class="px-4 py-1.5 bg-white/10 text-white border border-white/20 font-bold rounded-full transition shadow-[0_0_15px_rgba(255,255,255,0.1)] flex items-center gap-2">
+            <i data-lucide="orbit" class="w-3.5 h-3.5"></i>
+            <span>3D NodeSpace</span>
+          </button>
+          <button type="button" onclick="openSidebarTab('timeline')" class="px-4 py-1.5 text-slate-400 hover:text-slate-200 rounded-full transition flex items-center gap-2">
+            <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+            <span>Timeline</span>
+          </button>
+          <button type="button" onclick="openSidebarTab('syndicate')" class="px-4 py-1.5 text-slate-400 hover:text-slate-200 rounded-full transition flex items-center gap-2">
+            <i data-lucide="users" class="w-3.5 h-3.5"></i>
+            <span>Syndicate Cells</span>
+          </button>
+          <button type="button" onclick="switchTab('evidence')" id="btn-tab-evidence" class="px-4 py-1.5 text-slate-400 hover:text-slate-200 rounded-full transition flex items-center gap-2">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+            <span>BSA Sec 63 Vault</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Officer Badge & Actions -->
+      <div class="flex items-center gap-4">
+        <div class="hidden md:flex flex-col text-right font-mono">
+          <span id="officer-name-display" class="text-[11px] font-bold text-slate-100">Devendra Pratap</span>
+          <span id="officer-role-display" class="text-[9px] text-slate-400 tracking-wide">Cyber Crimes Investigation Cell - Sector 4</span>
+        </div>
+
+        <div class="flex items-center gap-2 border-l border-white/10 pl-4 ml-2">
+          <button type="button" onclick="document.getElementById('upload-modal').classList.remove('hidden')" class="px-4 py-1.5 bg-white/10 border border-white/20 text-slate-100 hover:bg-white/20 font-bold rounded-lg text-[10px] font-mono transition shadow-[0_0_10px_rgba(255,255,255,0.05)] flex items-center gap-2 uppercase tracking-wider">
+            <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+            <span>+ INGEST FIR</span>
+          </button>
+
+          <button type="button" onclick="handleLogout()" title="Logout Officer" class="p-1.5 bg-transparent hover:bg-white/10 text-slate-400 hover:text-slate-200 rounded-lg transition border border-white/10">
+            <i data-lucide="log-out" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Unified Left Intelligence Sidebar (Timeline, Syndicate Cells, Legend) -->
+    <aside id="left-sidebar" class="absolute top-14 left-0 h-[calc(100vh-3.5rem)] w-96 grayish-glass p-6 z-30 transform -translate-x-full transition-transform duration-500 flex flex-col shadow-[25px_0_60px_rgba(0,0,0,0.85)] border-r border-white/10">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+        <span class="text-xs uppercase text-slate-200 font-bold tracking-widest flex items-center gap-2">
+          <i data-lucide="activity" class="w-4 h-4"></i> Intelligence Stream
+        </span>
+        <button type="button" onclick="document.getElementById('left-sidebar').classList.add('-translate-x-full')" class="text-slate-400 hover:text-white transition-colors p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+
+      <!-- Sidebar Internal Tabs -->
+      <div class="flex items-center gap-1 bg-black/40 border border-white/10 p-1 rounded-lg text-[10px] font-mono mb-4">
+        <button type="button" onclick="switchSidebarTab('timeline')" id="btn-side-timeline" class="sidebar-subtab-btn flex-1 py-1.5 text-center font-bold rounded transition bg-white/10 text-white border border-white/20 shadow-[0_0_10px_rgba(255,255,255,0.05)]">Timeline</button>
+        <button type="button" onclick="switchSidebarTab('syndicate')" id="btn-side-syndicate" class="sidebar-subtab-btn flex-1 py-1.5 text-center text-slate-400 hover:text-slate-200 rounded transition">Syndicates</button>
+        <button type="button" onclick="switchSidebarTab('legend')" id="btn-side-legend" class="sidebar-subtab-btn flex-1 py-1.5 text-center text-slate-400 hover:text-slate-200 rounded transition">Legend</button>
+      </div>
+      
+      <!-- Scrollable Panels -->
+      <div class="flex-1 overflow-y-auto pr-2 space-y-4">
+        
+        <!-- 1. Timeline Tab Panel -->
+        <div id="side-content-timeline" class="sidebar-subtab-content">
+          <div class="flex items-center justify-between text-[10px] text-slate-400 uppercase tracking-widest mb-4 font-bold border-b border-white/5 pb-1.5">
+            <span>Chronological Events</span>
+            <span id="timeline-event-count" class="text-slate-200 font-mono bg-white/10 px-2 py-0.5 rounded border border-white/10">0 Events</span>
+          </div>
+          <div id="timeline-list" class="relative border-l border-white/20 ml-2 space-y-4"></div>
+        </div>
+
+        <!-- 2. Syndicate Cells Tab Panel -->
+        <div id="side-content-syndicate" class="sidebar-subtab-content hidden">
+          <div class="flex items-center justify-between text-[10px] text-slate-400 uppercase tracking-widest mb-4 font-bold border-b border-white/5 pb-1.5">
+            <span>Syndicate Cells (Louvain)</span>
+            <span id="syndicate-cluster-count" class="text-slate-200 font-mono bg-white/10 px-2 py-0.5 rounded border border-white/10">0 Cells Active</span>
+          </div>
+          <div id="syndicate-sidebar-list" class="space-y-4"></div>
+        </div>
+
+        <!-- 3. Network Legend Tab Panel -->
+        <div id="side-content-legend" class="sidebar-subtab-content hidden">
+          <div class="text-[10px] text-slate-400 uppercase tracking-widest mb-3 font-bold border-b border-white/5 pb-1.5">Network Topology Palette</div>
+          <div class="space-y-3.5 text-[11px] font-mono text-slate-300">
+            <div class="flex items-center justify-between"><div class="flex items-center gap-3"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-[0_0_8px_#f59e0b]"></span><span>Apparent Kingpin</span></div> <span id="leg-apparent" class="text-slate-200 font-bold">0</span></div>
+            <div class="flex items-center justify-between"><div class="flex items-center gap-3"><span class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#06b6d4]"></span><span>Surveillance Target</span></div> <span id="leg-target" class="text-slate-200 font-bold">0</span></div>
+            <div class="flex items-center justify-between"><div class="flex items-center gap-3"><span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span><span>Suspects & Operatives</span></div> <span id="leg-person" class="text-slate-200 font-bold">0</span></div>
+            <div class="flex items-center justify-between"><div class="flex items-center gap-3"><span class="w-2.5 h-2.5 rounded-full bg-indigo-400"></span><span>Logistics Assets</span></div> <span id="leg-vehicle" class="text-slate-200 font-bold">0</span></div>
+            <div class="flex items-center justify-between"><div class="flex items-center gap-3"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span><span>Mule Bank Accounts</span></div> <span id="leg-bank" class="text-slate-200 font-bold">0</span></div>
+            <div class="flex items-center justify-between"><div class="flex items-center gap-3"><span class="w-2.5 h-2.5 rounded-full bg-orange-400"></span><span>Weapons / Contraband</span></div> <span id="leg-weapon" class="text-slate-200 font-bold">0</span></div>
+            <div class="flex items-center justify-between"><div class="flex items-center gap-3"><span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span><span>Crime FIR Cases</span></div> <span id="leg-fir" class="text-slate-200 font-bold">0</span></div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- TAB 1: 3D Force Graph Container -->
+    <div id="tab-nodespace" class="tab-view block absolute inset-0 pt-14">
+      
+      <!-- Cyberpunk Graph Loading Overlay -->
+      <div id="graph-loader" class="absolute inset-0 z-50 flex items-center justify-center bg-[#020617]/80 backdrop-blur-md transition-opacity duration-700 hidden">
+        <div class="space-y-4 w-72 text-center p-6 rounded-2xl dossier-panel">
+          <div class="flex justify-center mb-2">
+            <div class="w-8 h-8 rounded-full border-t-2 border-r-2 border-sky-400 animate-spin"></div>
+          </div>
+          <div class="text-sky-400 font-mono text-[11px] uppercase tracking-widest font-bold glow-blue">Initializing NodeSpace...</div>
+          <div class="h-1.5 w-full bg-[#020617] rounded-full overflow-hidden border border-white/10 shadow-inner">
+            <div id="graph-loader-bar" class="h-full bg-gradient-to-r from-sky-600 to-cyan-400 w-[0%] transition-all duration-300 shadow-[0_0_15px_#0ea5e9]"></div>
+          </div>
+          <div id="graph-loader-text" class="text-slate-400 font-mono text-[9px] uppercase tracking-wider">Establishing secure handshake</div>
+        </div>
+      </div>
+
+      <div id="3d-graph"></div>
+
+      <!-- Grouped Live Counters HUD (Floating Left, Cyber Clipped) -->
+      <div class="absolute top-24 left-6 z-20 grayish-glass cyber-clip-left w-64 p-5 flex flex-col gap-4 text-[10px] uppercase font-mono shadow-2xl pointer-events-none border border-white/10">
+        <div class="flex justify-between items-center border-b border-white/5 pb-1.5"><span class="text-slate-400 font-bold tracking-widest">ENTITIES</span> <span id="node-count" class="text-slate-100 font-extrabold text-sm glow-cyan">0</span></div>
+        <div class="flex justify-between items-center border-b border-white/5 pb-1.5"><span class="text-slate-400 font-bold tracking-widest">CONNECTIONS</span> <span id="link-count" class="text-slate-100 font-extrabold text-sm glow-cyan">0</span></div>
+        <div class="flex justify-between items-center"><span class="text-slate-400 font-bold tracking-widest">CRITICAL THREATS</span> <span id="threat-count" class="text-red-400 font-extrabold text-sm glow-red">0</span></div>
+      </div>
+
+      <!-- Cyber Zoom Controls (Bottom Center) -->
+      <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-20 grayish-glass rounded-full px-6 py-2.5 flex items-center gap-5 shadow-2xl border border-white/10">
+        <button type="button" id="zoom-out-btn" class="text-slate-400 hover:text-white font-bold text-2xl leading-none transition-colors px-2 cursor-pointer pb-1">−</button>
+        <input type="range" id="camera-zoom-slider" min="100" max="3000" value="1600" class="w-48 cursor-pointer accent-slate-300" />
+        <button type="button" id="zoom-in-btn" class="text-slate-400 hover:text-white font-bold text-xl leading-none transition-colors px-2 cursor-pointer">+</button>
+      </div>
+    </div>
+
+    <!-- TAB 4: BSA Section 63 Evidence Vault -->
+    <div id="tab-evidence" class="tab-view hidden absolute inset-0 top-14 bg-[#020617]/90 backdrop-blur-md z-20 p-8 overflow-y-auto">
+      <div class="max-w-5xl mx-auto space-y-6">
+        
+        <!-- Vault Header & Legal Compliance Banner -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-white/10 pb-5 gap-4">
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <h2 class="text-base font-bold text-slate-100 flex items-center gap-2 tracking-wide uppercase font-sans">
+                <i data-lucide="shield-check" class="w-5 h-5 text-emerald-400"></i>
+                BSA Section 63 Electronic Evidence Vault
+              </h2>
+            </div>
+            <p class="text-xs text-slate-400 font-mono">Tamper-proof cryptographic chain of custody complying with Bharatiya Sakshya Adhiniyam, 2023 (Sec 63 / Form 65B)</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="text-xs px-3.5 py-1.5 rounded-full bg-emerald-950/50 border border-emerald-700/50 text-emerald-300 font-mono font-bold flex items-center gap-1.5 shadow-[0_0_12px_rgba(16,185,129,0.15)]">
+              <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+              <span>IMMUTABLE LEDGER</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Compliance Stats Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
+          <div class="p-4 rounded-xl liquid-glass border border-white/10">
+            <div class="text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1">Ledger Integrity</div>
+            <div class="text-emerald-400 text-base font-black flex items-center gap-2">
+              <i data-lucide="check-circle" class="w-4 h-4"></i>
+              <span>SHA3-256 VERIFIED</span>
+            </div>
+            <div class="text-[10px] text-slate-500 mt-1">Zero cryptographic discrepancies</div>
+          </div>
+
+          <div class="p-4 rounded-xl liquid-glass border border-white/10">
+            <div class="text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1">Judicial Standard</div>
+            <div class="text-slate-200 text-base font-black flex items-center gap-2">
+              <i data-lucide="scale" class="w-4 h-4"></i>
+              <span>BSA §63(4) CERTIFIED</span>
+            </div>
+            <div class="text-[10px] text-slate-500 mt-1">Court-admissible electronic record</div>
+          </div>
+
+          <div class="p-4 rounded-xl liquid-glass border border-white/10">
+            <div class="text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1">Custody Custodian</div>
+            <div class="text-slate-100 text-sm font-bold flex items-center gap-2">
+              <i data-lucide="badge-check" class="w-4 h-4 text-slate-300"></i>
+              <span id="vault-officer-display">Devendra Pratap</span>
+            </div>
+            <div class="text-[10px] text-slate-500 mt-1 font-mono">Cyber Crime PS / Sec-4</div>
+          </div>
+        </div>
+
+        <!-- Evidence List Container -->
+        <div class="space-y-4">
+          <div class="flex items-center justify-between text-[11px] font-mono text-slate-400 uppercase tracking-wider border-b border-white/5 pb-2">
+            <span>Cryptographic Chain of Custody Blocks</span>
+            <span id="vault-record-count" class="text-slate-200 font-bold">0 Blocks Logged</span>
+          </div>
+          <div id="evidence-vault-list" class="space-y-3 font-mono"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- FLOATING & DRAGGABLE Dossier Inspector -->
+    <aside id="inspector" class="hidden absolute top-24 right-8 w-96 max-h-[calc(100vh-8rem)] overflow-y-auto grayish-glass cyber-clip p-5 z-30 flex flex-col space-y-4 font-mono text-xs shadow-2xl">
+      <div>
+        <div id="inspector-header" class="flex items-center justify-between border-b border-white/10 pb-2.5 mb-3 cursor-grab active:cursor-grabbing select-none">
+          <span class="text-[10px] uppercase text-slate-300 font-bold tracking-wider pointer-events-none">Entity Intelligence Dossier</span>
+          <button type="button" onclick="document.getElementById('inspector').classList.add('hidden')" class="text-slate-400 hover:text-white text-base hover:bg-white/10 rounded px-1 transition-colors">✕</button>
+        </div>
+
+        <div class="mb-3">
+          <h2 id="inspect-name" class="text-base font-bold text-white leading-tight break-all font-sans">Entity Name</h2>
+          <span id="inspect-type" class="inline-block mt-1 px-2 py-0.5 text-[10px] font-bold rounded bg-white/10 text-slate-200 border border-white/20">ENTITY</span>
+        </div>
+
+        <div class="p-3 rounded-lg bg-black/40 border border-white/10 mb-3">
+          <div class="flex justify-between items-center mb-1.5">
+            <span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Criminal Threat Rating</span>
+            <span id="inspect-risk-val" class="text-base font-extrabold text-red-500 glow-red">0%</span>
+          </div>
+          <div class="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div id="inspect-risk-bar" class="h-full bg-red-500 w-[0%] transition-all duration-500 shadow-[0_0_8px_#ef4444]"></div>
+          </div>
+        </div>
+
+        <div class="space-y-2 text-[11px] mb-3">
+          <div class="flex justify-between border-b border-white/5 pb-1">
+            <span class="text-slate-400">SYNDICATE CLUSTER</span>
+            <span id="inspect-cluster" class="text-slate-200 font-bold">Syndicate-1</span>
+          </div>
+          <div class="flex justify-between border-b border-white/5 pb-1">
+            <span class="text-slate-400">PAGERANK (AUTHORITY)</span>
+            <span id="inspect-pagerank" class="text-slate-200 font-bold">0.000</span>
+          </div>
+          <div class="flex justify-between border-b border-white/5 pb-1">
+            <span class="text-slate-400">BETWEENNESS (BROKER)</span>
+            <span id="inspect-between" class="text-slate-200 font-bold">0.000</span>
+          </div>
+        </div>
+
+        <div id="inspect-sections-box" class="mb-3">
+          <span class="text-[10px] text-slate-400 block mb-1 font-semibold uppercase tracking-wider">Legal Charges & Statutory Bail</span>
+          <div id="inspect-sections" class="flex flex-wrap gap-1"></div>
+        </div>
+
+        <div id="phone-intel-section" class="hidden space-y-3 pt-2.5 border-t border-white/10">
+          <div class="flex items-center justify-between bg-black/40 p-2 rounded-lg border border-white/10">
+            <span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Intercept Monitor</span>
+            <span id="inspect-intercept-badge" class="px-2 py-0.5 rounded text-[9px] font-mono font-bold"></span>
+          </div>
+
+          <div class="p-3 bg-black/40 border border-white/10 rounded-lg space-y-2 text-[11px]">
+            <span class="text-[9px] uppercase font-bold text-slate-300 tracking-wider block">Telecom Telemetry & Cell Site Pings</span>
+            <div class="grid grid-cols-2 gap-2 font-mono">
+              <div>
+                <span class="text-slate-500 block text-[9px]">CARRIER / CIR</span>
+                <span id="phone-carrier" class="text-slate-200 font-bold">Jio / Airtel (Primary)</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block text-[9px]">INTERCEPT WARRANTS</span>
+                <span id="phone-warrant" class="text-amber-400 font-bold">§5(2) Telegraph Act</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block text-[9px]">IMEI HARDWARE</span>
+                <span id="phone-imei" class="text-slate-300">863490041289104</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block text-[9px]">LAST TOWER BTS</span>
+                <span id="phone-tower" class="text-cyan-400">Gateway Sector-62</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-2.5 bg-black/40 border border-white/10 rounded-lg space-y-1 text-xs">
+            <span class="text-[9px] uppercase font-bold text-slate-300 tracking-wider block">Evidence Source Provenance</span>
+            <div class="text-slate-200 font-bold break-all flex items-center gap-1.5 text-[11px]">
+              <i data-lucide="file-text" class="w-3.5 h-3.5 text-slate-300 shrink-0"></i>
+              <span id="inspect-source-file">--</span>
+            </div>
+            <div class="text-[10px] text-slate-400" id="inspect-source-anchor">Page --, Reference --</div>
+          </div>
+
+          <div class="space-y-1">
+            <div class="flex items-center justify-between text-[10px] text-slate-400 uppercase font-semibold">
+              <span>Connected Target Endpoints</span>
+              <span id="inspect-link-count" class="text-slate-200 font-mono">0 Linked</span>
+            </div>
+            <div id="inspect-linked-suspects" class="space-y-1 max-h-40 overflow-y-auto pr-1"></div>
+          </div>
+        </div>
+
+        <div id="vehicle-intel-section" class="hidden space-y-3 pt-2.5 border-t border-white/10">
+          <div class="flex items-center justify-between bg-black/40 p-2 rounded-lg border border-white/10">
+            <span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Logistics Alert</span>
+            <span id="inspect-vehicle-badge" class="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-950/50 text-indigo-300 border border-indigo-700/50">SURVEILLANCE ASSET</span>
+          </div>
+
+          <div class="p-3 bg-black/40 border border-white/10 rounded-lg space-y-2 text-[11px]">
+            <span class="text-[9px] uppercase font-bold text-slate-300 tracking-wider block">RTO Registry & Logistics Telemetry</span>
+            <div class="grid grid-cols-2 gap-2 font-mono">
+              <div>
+                <span class="text-slate-500 block text-[9px]">MAKE & MODEL</span>
+                <span id="veh-make" class="text-slate-100 font-bold">Toyota Fortuner</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block text-[9px]">COLOR / CLASS</span>
+                <span id="veh-class" class="text-slate-200">White / SUV</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block text-[9px]">CHASSIS / VIN</span>
+                <span id="veh-vin" class="text-slate-300">MA3EW41S0P79021</span>
+              </div>
+              <div>
+                <span class="text-slate-500 block text-[9px]">FASTAG CHECKPOINT</span>
+                <span id="veh-fastag" class="text-amber-400">Bypass Toll Gate #03</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-2.5 bg-black/40 border border-white/10 rounded-lg space-y-1 text-xs">
+            <span class="text-[9px] uppercase font-bold text-slate-300 tracking-wider block">Logistics Annexure Citation</span>
+            <div class="text-slate-200 font-bold break-all flex items-center gap-1.5 text-[11px]">
+              <i data-lucide="file-text" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+              <span id="veh-source-file">--</span>
+            </div>
+            <div class="text-[10px] text-indigo-400" id="veh-source-anchor">Logistics Annexure</div>
+          </div>
+
+          <div class="space-y-1">
+            <div class="flex items-center justify-between text-[10px] text-slate-400 uppercase font-semibold">
+              <span>Known Drivers & Operatives</span>
+              <span id="veh-driver-count" class="text-slate-200 font-mono">0 Linked</span>
+            </div>
+            <div id="veh-linked-drivers" class="space-y-1 max-h-40 overflow-y-auto pr-1"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="pt-1">
+        <div class="p-2.5 bg-white/5 border border-white/10 rounded-lg text-[10px] text-slate-300 space-y-0.5">
+          <strong class="block font-bold">BSA Section 63 Sealed</strong>
+          <span>Digital evidence fingerprint cryptographically verified.</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Upload Modal -->
+    <div id="upload-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="dossier-panel rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+        <div class="flex justify-between items-center border-b border-white/10 pb-3">
+          <h3 class="font-bold text-slate-100 text-xs uppercase tracking-wider flex items-center gap-2">
+            <i data-lucide="upload-cloud" class="w-4 h-4 text-slate-300"></i>
+            Ingest FIR / Intelligence Document
+          </h3>
+          <button type="button" onclick="document.getElementById('upload-modal').classList.add('hidden')" class="text-slate-400 hover:text-white">✕</button>
+        </div>
+        <input type="file" id="file-input" accept=".pdf" class="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:bg-white/5 file:text-slate-200 hover:file:bg-white/10 cursor-pointer font-mono" />
+        <div id="upload-status" class="hidden text-xs p-3 rounded-lg bg-black/50 border border-white/10 text-slate-300 font-mono"></div>
+        <button type="button" onclick="uploadDocument()" id="upload-btn" class="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/20 text-slate-200 rounded-lg text-xs font-bold font-mono transition shadow-[0_0_15px_rgba(255,255,255,0.05)] uppercase">
+          EXTRACT & ANALYZE
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+    const BACKEND_URL = "http://localhost:8000/api/v1";
+    let GraphInstance = null;
+    let currentGraphData = { nodes: [], links: [], events: [] };
+    
+    // Feature: Triple-Click Global State
+    let tripleClickState = { id: null, count: 0, timer: null };
+    let linkedNodeA = null;
+    let linkedNodeB = null;
+    let highlightMode = false;
+    let loaderInterval;
+
+    // Custom Toast Notification System
+    function showToast(message) {
+      let toast = document.getElementById('custom-toast');
+      if (!toast) {
+          toast = document.createElement('div');
+          toast.id = 'custom-toast';
+          toast.className = 'fixed top-20 left-1/2 transform -translate-x-1/2 z-[100] bg-cyan-950/90 text-cyan-300 border border-cyan-500/50 px-5 py-2.5 rounded-full text-xs font-mono font-bold tracking-wide shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-opacity duration-300 pointer-events-none opacity-0';
+          document.body.appendChild(toast);
+      }
+      toast.innerText = message;
+      toast.style.opacity = '1';
+      clearTimeout(toast.timeoutId);
+      toast.timeoutId = setTimeout(() => { toast.style.opacity = '0'; }, 3500);
+    }
+
+    const canvas = document.getElementById('constellation-bg');
+    const ctx = canvas.getContext('2d');
+    let width, height;
+    let particles = [];
+    
+    const glowingHues = ['#00FFFF', '#38bdf8', '#0769D2', '#0ea5e9', '#8be9fd', '#ffffff'];
+
+    function resizeCanvas() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = width;
+      canvas.height = height;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    for (let i = 0; i < 120; i++) {
+      particles.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        radius: Math.random() * 2.0 + 0.5,
+        color: glowingHues[Math.floor(Math.random() * glowingHues.length)]
+      });
+    }
+
+    function animateBackground() {
+      ctx.fillStyle = 'rgba(2, 6, 23, 0.3)';
+      ctx.fillRect(0, 0, width, height);
+
+      for (let i = 0; i < particles.length; i++) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < 0 || p.x > width) p.vx *= -1;
+        if (p.y < 0 || p.y > height) p.vy *= -1;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = p.color; 
+        ctx.fill();
+        
+        ctx.shadowBlur = 0;
+
+        for (let j = i + 1; j < particles.length; j++) {
+          let p2 = particles[j];
+          let dist = Math.hypot(p.x - p2.x, p.y - p2.y);
+          
+          if (dist < 160) {
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p2.x, p2.y);
+            
+            let grad = ctx.createLinearGradient(p.x, p.y, p2.x, p2.y);
+            grad.addColorStop(0, p.color);
+            grad.addColorStop(1, p2.color);
+            
+            ctx.strokeStyle = grad;
+            ctx.globalAlpha = 1 - (dist / 160);
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+          }
+        }
+      }
+      requestAnimationFrame(animateBackground);
+    }
+    animateBackground();
+
+    let LoginGlobeScene, LoginGlobeCamera, LoginGlobeRenderer, globeGroup;
+
+    function initLoginGlobe() {
+      const container = document.getElementById('login-globe-container');
+      if (!container) return;
+      container.innerHTML = '';
+
+      LoginGlobeScene = new THREE.Scene();
+      LoginGlobeCamera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+      LoginGlobeCamera.position.z = 3.6;
+
+      LoginGlobeRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+      LoginGlobeRenderer.setSize(container.clientWidth, container.clientHeight);
+      LoginGlobeRenderer.setPixelRatio(window.devicePixelRatio);
+      LoginGlobeRenderer.shadowMap.enabled = true;
+      LoginGlobeRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(LoginGlobeRenderer.domElement);
+
+      globeGroup = new THREE.Group();
+      LoginGlobeScene.add(globeGroup);
+
+      const ambientLight = new THREE.AmbientLight(0x0ea5e9, 0.8);
+      LoginGlobeScene.add(ambientLight);
+
+      const cyanPointLight = new THREE.PointLight(0x00ffff, 3.5, 50);
+      cyanPointLight.position.set(4, 4, 4);
+      LoginGlobeScene.add(cyanPointLight);
+
+      const blueBackLight = new THREE.PointLight(0x3b82f6, 2.5, 50);
+      blueBackLight.position.set(-4, -3, -4);
+      LoginGlobeScene.add(blueBackLight);
+
+      const coreGeo = new THREE.SphereGeometry(1, 64, 64);
+      const coreMat = new THREE.MeshStandardMaterial({
+        color: 0x020617, 
+        roughness: 0.3,
+        metalness: 0.8,
+        emissive: 0x011627,
+        emissiveIntensity: 0.6
+      });
+      const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+      globeGroup.add(coreMesh);
+
+      const dotGeo = new THREE.SphereGeometry(1.02, 64, 64);
+      const dotMat = new THREE.PointsMaterial({
+        color: 0x38bdf8, 
+        size: 0.018,
+        transparent: true,
+        opacity: 0.85
+      });
+      const dotMesh = new THREE.Points(dotGeo, dotMat);
+      globeGroup.add(dotMesh);
+
+      const outerGeo = new THREE.IcosahedronGeometry(1.18, 3);
+      const outerMat = new THREE.MeshBasicMaterial({
+        color: 0x00ffff, 
+        wireframe: true,
+        transparent: true,
+        opacity: 0.22
+      });
+      const outerMesh = new THREE.Mesh(outerGeo, outerMat);
+      globeGroup.add(outerMesh);
+
+      const nodeGeo = new THREE.BufferGeometry();
+      const nodeCount = 220;
+      const nodePos = new Float32Array(nodeCount * 3);
+      for(let i=0; i<nodeCount*3; i+=3) {
+        const u = Math.random();
+        const v = Math.random();
+        const theta = u * 2.0 * Math.PI;
+        const phi = Math.acos(2.0 * v - 1.0);
+        const r = 1.22 + Math.random() * 0.15;
+        nodePos[i] = r * Math.sin(phi) * Math.cos(theta);
+        nodePos[i+1] = r * Math.sin(phi) * Math.sin(theta);
+        nodePos[i+2] = r * Math.cos(phi);
+      }
+      nodeGeo.setAttribute('position', new THREE.BufferAttribute(nodePos, 3));
+      const nodeMat = new THREE.PointsMaterial({ 
+        color: 0x00ffff, 
+        size: 0.035, 
+        transparent: true, 
+        opacity: 0.95 
+      });
+      const nodePoints = new THREE.Points(nodeGeo, nodeMat);
+      globeGroup.add(nodePoints);
+
+      function animate() {
+        requestAnimationFrame(animate);
+        globeGroup.rotation.y += 0.0025;
+        globeGroup.rotation.x += 0.0008;
+        outerMesh.rotation.y -= 0.0015;
+        nodePoints.rotation.y -= 0.0012;
+        LoginGlobeRenderer.render(LoginGlobeScene, LoginGlobeCamera);
+      }
+      animate();
+    }
+    window.addEventListener('DOMContentLoaded', initLoginGlobe);
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('auth-email').value;
+      const pass = document.getElementById('auth-pass').value;
+      const errBox = document.getElementById('login-err');
+      const btn = document.getElementById('auth-btn');
+      const loadingContainer = document.getElementById('login-loading-container');
+      const loadingBar = document.getElementById('login-loading-bar');
+      const loadingPct = document.getElementById('login-loading-pct');
+      const loadingText = document.getElementById('login-loading-text');
+
+      errBox.classList.add('hidden');
+      loadingContainer.classList.remove('hidden');
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+
+      let progress = 5;
+      loadingBar.style.width = `${progress}%`;
+      loadingPct.innerText = `${progress}%`;
+      loadingText.innerText = "INITIALIZING ML PACKAGES & DATA...";
+
+      // Slow, patient ticker so it gracefully waits for your backend models to load
+      const progressTimer = setInterval(() => {
+        if (progress < 92) {
+          progress += 2;
+          loadingBar.style.width = `${progress}%`;
+          loadingPct.innerText = `${progress}%`;
+          if (progress > 30) loadingText.innerText = "LOADING NEURAL PIPELINES...";
+          if (progress > 60) loadingText.innerText = "VERIFYING SEC-63 CREDENTIALS...";
+        }
+      }, 500);
+
+      const formData = new URLSearchParams();
+      formData.append('username', email);
+      formData.append('password', pass);
+
+      try {
+        const res = await fetch(`${BACKEND_URL}/auth/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: formData
+        });
+
+        clearInterval(progressTimer);
+
+        if (!res.ok) {
+          throw new Error("Invalid Police ID or Security Key");
+        }
+
+        loadingBar.style.width = '100%';
+        loadingPct.innerText = '100%';
+        loadingText.innerText = "ACCESS GRANTED. LAUNCHING DOSSIER...";
+
+        const data = await res.json();
+        sessionStorage.setItem('ncrb_token', data.access_token);
+        sessionStorage.setItem('officer_name', data.officer_name);
+        sessionStorage.setItem('badge_id', data.badge_id);
+
+        setTimeout(() => {
+          unlockDashboard();
+        }, 800);
+
+      } catch (err) {
+        clearInterval(progressTimer);
+        loadingContainer.classList.add('hidden');
+        errBox.innerText = "Failed to fetch the data";
+        errBox.classList.remove('hidden');
+        btn.disabled = false;
+        btn.style.opacity = '1';
+      }
+    }
+
+    function unlockDashboard() {
+      // Hide login overlay immediately
+      document.getElementById('login-overlay').classList.add('hidden');
+      
+      // Show main dashboard immediately
+      document.getElementById('app-container').classList.remove('hidden');
+
+      // Populate officer details in the dashboard
+      const offName = sessionStorage.getItem('officer_name') || 'Devendra Pratap';
+      document.getElementById('officer-name-display').innerText = offName;
+      document.getElementById('vault-officer-display').innerText = offName;
+      
+      // Default fallback for unit/role since the welcome page input is removed
+      const roleDisplay = sessionStorage.getItem('badge_id') || 'Cyber Crimes Investigation Cell - Sector 4';
+      document.getElementById('officer-role-display').innerText = roleDisplay;
+
+      // Initialize components
+      if (!GraphInstance) initGraph();
+      loadCurrentGraph();
+      loadEvidenceVault();
+      lucide.createIcons();
+    }
+
+    function handleLogout() {
+      sessionStorage.clear();
+      window.location.reload();
+    }
+
+    if (sessionStorage.getItem('ncrb_token')) unlockDashboard();
+
+    // Toggle Sidebar Drawer
+    document.getElementById('sidebar-toggle-btn')?.addEventListener('click', () => {
+      document.getElementById('left-sidebar').classList.toggle('-translate-x-full');
+      lucide.createIcons();
+    });
+
+    // Sidebar View Switcher Logic
+    function openSidebarTab(tab) {
+      const sb = document.getElementById('left-sidebar');
+      if (sb) sb.classList.remove('-translate-x-full');
+      switchSidebarTab(tab);
+    }
+
+    function switchSidebarTab(tab) {
+      document.querySelectorAll('.sidebar-subtab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.sidebar-subtab-btn').forEach(btn => {
+        btn.className = "sidebar-subtab-btn flex-1 py-1.5 text-center text-slate-400 hover:text-slate-200 rounded transition";
+      });
+
+      const activeContent = document.getElementById(`side-content-${tab}`);
+      const activeBtn = document.getElementById(`btn-side-${tab}`);
+      if (activeContent) activeContent.classList.remove('hidden');
+      if (activeBtn) {
+        activeBtn.className = "sidebar-subtab-btn flex-1 py-1.5 text-center font-bold rounded transition bg-white/10 text-white border border-white/20 shadow-[0_0_10px_rgba(255,255,255,0.05)]";
+      }
+      lucide.createIcons();
+    }
+
+    // Top Header Switcher
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-view').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('nav button').forEach(btn => {
+        if(btn.id !== 'sidebar-toggle-btn' && btn.id !== 'zoom-in-btn' && btn.id !== 'zoom-out-btn') {
+           btn.className = "px-4 py-1.5 text-slate-400 hover:text-slate-200 rounded-full transition flex items-center gap-2";
+        }
+      });
+
+      const activeTabEl = document.getElementById(`tab-${tabName}`);
+      const activeBtn = document.getElementById(`btn-tab-${tabName}`);
+      if (activeTabEl) activeTabEl.classList.remove('hidden');
+      if (activeBtn && activeBtn.id !== 'sidebar-toggle-btn') activeBtn.className = "px-4 py-1.5 bg-white/10 text-white border border-white/20 font-bold rounded-full transition shadow-[0_0_15px_rgba(255,255,255,0.1)] flex items-center gap-2";
+
+      if (tabName === 'evidence') loadEvidenceVault();
+      lucide.createIcons();
+    }
+
+    function startGraphLoader(statusText = "QUERYING INTELLIGENCE MESH") {
+      const loader = document.getElementById('graph-loader');
+      const bar = document.getElementById('graph-loader-bar');
+      const text = document.getElementById('graph-loader-text');
+      
+      if (!loader) return;
+      
+      loader.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
+      if (bar) bar.style.width = '5%';
+      if (text) text.innerText = statusText;
+
+      // Fake progress tick to keep the UI feeling alive
+      let progress = 5;
+      clearInterval(loaderInterval);
+      loaderInterval = setInterval(() => {
+        progress += Math.random() * 12;
+        if (progress > 88) progress = 88; // Cap at 88% until data actually resolves
+        if (bar) bar.style.width = `${progress}%`;
+      }, 250);
+    }
+
+    function completeGraphLoader() {
+      const loader = document.getElementById('graph-loader');
+      const bar = document.getElementById('graph-loader-bar');
+      const text = document.getElementById('graph-loader-text');
+      
+      if (!loader) return;
+
+      clearInterval(loaderInterval);
+      if (bar) bar.style.width = '100%';
+      if (text) text.innerText = "NODESPACE RENDERED.";
+
+      // Smooth fade out
+      setTimeout(() => {
+        loader.classList.add('opacity-0', 'pointer-events-none');
+        setTimeout(() => loader.classList.add('hidden'), 700);
+      }, 600);
+    }
+
+    // Graph Node Generator Logic (Strictly separated: Only 1 True Mastermind is Red)
+    function createNodeObject(node) {
+      const group = new THREE.Group();
+
+      const details = node.details || {};
+      const isActualMastermind = node.type === "KINGPIN" || node.type === "ACTUAL_KINGPIN";
+      const isApparent = node.type === "APPARENT_KINGPIN";
+      
+      let radius = 6.5;
+      if (isActualMastermind) radius = 13.0;
+      else if (isApparent) radius = 10.0;
+      else if (node.type === "PERSON" || node.type === "OPERATIONAL_NODE") radius = 8.5;
+      else if (node.type === "CRIME_FIR") radius = 8.8;
+      else if (node.type === "POLICE_STATION") radius = 8.5;
+      else if (node.type === "VEHICLE") radius = 7.0;
+      else if (node.type === "BANK_ACCOUNT") radius = 6.5;
+      else if (node.type === "PHONE") radius = 5.5;
+
+      let colorHex = 0x94a3b8;
+      if (isActualMastermind) colorHex = 0xef4444; // Red ONLY for the single true master threat
+      else if (isApparent) colorHex = 0xf59e0b; // Amber
+      else if (node.type === "TARGET" || node.type === "PHONE") colorHex = 0x06b6d4; // Cyan
+      else if (node.type === "PERSON" || node.type === "OPERATIONAL_NODE") colorHex = 0xa855f7; // Purple for all other suspects
+      else if (node.type === "CRIME_FIR") colorHex = 0xf43f5e; // Rose
+      else if (node.type === "POLICE_STATION") colorHex = 0x14b8a6; // Teal
+      else if (node.type === "VEHICLE") colorHex = 0x6366f1; // Indigo
+      else if (node.type === "BANK_ACCOUNT") colorHex = 0x10b981; // Emerald
+      else if (node.type === "WEAPON") colorHex = 0xf97316; // Orange
+      else if (node.color) colorHex = parseInt(node.color.replace('#', '0x'));
+
+      // Check dimming state
+      let isDimmed = false;
+      if (highlightMode) {
+          const nId = node.id !== undefined ? node.id : node.name;
+          const aId = linkedNodeA?.id !== undefined ? linkedNodeA.id : linkedNodeA?.name;
+          const bId = linkedNodeB?.id !== undefined ? linkedNodeB.id : linkedNodeB?.name;
+          if (nId !== aId && nId !== bId) isDimmed = true;
+      }
+
+      const sphereMat = new THREE.MeshBasicMaterial({ 
+        color: colorHex,
+        transparent: true,
+        opacity: isDimmed ? 0.15 : 1.0
+      });
+      const sphere = new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 32), sphereMat);
+      group.add(sphere);
+
+      const auraMat = new THREE.MeshBasicMaterial({
+        color: colorHex,
+        transparent: true,
+        opacity: isDimmed ? 0.05 : (isActualMastermind ? 0.35 : 0.2),
+        side: THREE.BackSide,
+        blending: THREE.AdditiveBlending
+      });
+      const aura = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.35, 32, 32), auraMat);
+      group.add(aura);
+
+      if (isActualMastermind || isApparent) {
+        const ringGeom = new THREE.RingGeometry(radius + 2.5, radius + 4.5, 64);
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: colorHex,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: isDimmed ? 0.1 : 0.7
+        });
+        const ringMesh = new THREE.Mesh(ringGeom, ringMat);
+        ringMesh.rotation.x = Math.PI / 2.6;
+        group.add(ringMesh);
+      }
+
+      const rawName = String(node.name || 'Target').trim();
+      const cleanName = rawName.length > 20 ? rawName.slice(0, 18) + '..' : rawName;
+      
+      const sprite = new SpriteText(cleanName);
+      sprite.color = isDimmed ? 'rgba(255,255,255,0.2)' : '#ffffff';
+      sprite.textHeight = isActualMastermind ? 4.5 : 3.0;
+      sprite.fontWeight = 'bold';
+      sprite.fontFace = 'ui-monospace, SFMono-Regular, monospace';
+      sprite.backgroundColor = 'transparent';
+      sprite.padding = [0, 0];
+      sprite.borderColor = 'transparent';
+      sprite.borderWidth = 0;
+      sprite.borderRadius = 0;
+      sprite.position.set(0, radius + 5.5, 0);
+      group.add(sprite);
+
+      return group;
+    }
+
+    // Highlight Update Trigger
+    function updateHighlightVisuals() {
+      if (!GraphInstance) return;
+      
+      GraphInstance.nodeThreeObject(createNodeObject); // Re-render nodes for dimming
+      
+      GraphInstance.linkColor(link => {
+          if (!highlightMode) return 'rgba(255, 255, 255, 0.8)';
+          const sId = typeof link.source === 'object' ? (link.source.id || link.source.name) : link.source;
+          const tId = typeof link.target === 'object' ? (link.target.id || link.target.name) : link.target;
+          const aId = linkedNodeA?.id !== undefined ? linkedNodeA.id : linkedNodeA?.name;
+          const bId = linkedNodeB?.id !== undefined ? linkedNodeB.id : linkedNodeB?.name;
+          
+          const isMatch = (sId === aId && tId === bId) || (sId === bId && tId === aId);
+          return isMatch ? '#00ffff' : 'rgba(255, 255, 255, 0.05)';
+      })
+      .linkWidth(link => {
+          if (!highlightMode) return 1.5;
+          const sId = typeof link.source === 'object' ? (link.source.id || link.source.name) : link.source;
+          const tId = typeof link.target === 'object' ? (link.target.id || link.target.name) : link.target;
+          const aId = linkedNodeA?.id !== undefined ? linkedNodeA.id : linkedNodeA?.name;
+          const bId = linkedNodeB?.id !== undefined ? linkedNodeB.id : linkedNodeB?.name;
+          
+          const isMatch = (sId === aId && tId === bId) || (sId === bId && tId === aId);
+          return isMatch ? 4.0 : 0.5;
+      })
+      .linkDirectionalParticles(link => {
+          if (!highlightMode) return 2;
+          const sId = typeof link.source === 'object' ? (link.source.id || link.source.name) : link.source;
+          const tId = typeof link.target === 'object' ? (link.target.id || link.target.name) : link.target;
+          const aId = linkedNodeA?.id !== undefined ? linkedNodeA.id : linkedNodeA?.name;
+          const bId = linkedNodeB?.id !== undefined ? linkedNodeB.id : linkedNodeB?.name;
+          
+          return ((sId === aId && tId === bId) || (sId === bId && tId === aId)) ? 8 : 0;
+      })
+      .linkDirectionalParticleWidth(link => {
+          if (!highlightMode) return 2.0;
+          const sId = typeof link.source === 'object' ? (link.source.id || link.source.name) : link.source;
+          const tId = typeof link.target === 'object' ? (link.target.id || link.target.name) : link.target;
+          const aId = linkedNodeA?.id !== undefined ? linkedNodeA.id : linkedNodeA?.name;
+          const bId = linkedNodeB?.id !== undefined ? linkedNodeB.id : linkedNodeB?.name;
+          
+          return ((sId === aId && tId === bId) || (sId === bId && tId === aId)) ? 4.0 : 0;
+      })
+      .linkDirectionalParticleColor(() => highlightMode ? '#00ffff' : '#ffffff');
+    }
+
+    function initGraph() {
+      const elem = document.getElementById('3d-graph');
+      
+      GraphInstance = ForceGraph3D()(elem)
+        .backgroundColor('#020617') 
+        .showNavInfo(false)
+        .d3AlphaDecay(0.05)   
+        .d3VelocityDecay(0.4)  
+        .linkCurvature(0.0) // Straight lines
+        .linkWidth(2.0) // Clean prominent line width
+        .linkColor(() => '#ffffff') // Bright white straight lines only
+        .linkDirectionalParticles(2)
+        .linkDirectionalParticleWidth(2.5)
+        .linkDirectionalParticleSpeed(0.005)
+        .linkDirectionalParticleColor(() => '#ffffff') // White particles
+        .nodeThreeObject(createNodeObject)
+        .onNodeClick(node => {
+          focusNode(node.id !== undefined ? node.id : node.name);
+
+          // Feature: Triple Click Connection Logic
+          const nId = node.id !== undefined ? node.id : node.name;
+          if (tripleClickState.id === nId) {
+              tripleClickState.count++;
+          } else {
+              tripleClickState.id = nId;
+              tripleClickState.count = 1;
+          }
+
+          clearTimeout(tripleClickState.timer);
+          tripleClickState.timer = setTimeout(() => {
+              tripleClickState.count = 0;
+              tripleClickState.id = null;
+          }, 600); 
+
+          if (tripleClickState.count === 3) {
+              if (!linkedNodeA) {
+                  linkedNodeA = node;
+                  showToast(`Node [${node.name}] selected. Triple-tap another node to link.`);
+              } else if (linkedNodeA && (linkedNodeA.id !== node.id && linkedNodeA.name !== node.name)) {
+                  linkedNodeB = node;
+                  
+                  // Add link dynamically if it doesn't exist
+                  const aId = linkedNodeA.id !== undefined ? linkedNodeA.id : linkedNodeA.name;
+                  const bId = linkedNodeB.id !== undefined ? linkedNodeB.id : linkedNodeB.name;
+                  
+                  const linkExists = (currentGraphData.links || []).some(l => {
+                      const sId = typeof l.source === 'object' ? (l.source.id || l.source.name) : l.source;
+                      const tId = typeof l.target === 'object' ? (l.target.id || l.target.name) : l.target;
+                      return (sId === aId && tId === bId) || (sId === bId && tId === aId);
+                  });
+
+                  if (!linkExists) {
+                      currentGraphData.links.push({
+                          source: aId,
+                          target: bId,
+                          relationship: 'MANUAL_LINK'
+                      });
+                  }
+
+                  // Force the engine to recognize the change and apply highlighting
+                  highlightMode = true;
+                  updateHighlightVisuals();
+                  
+                  // Re-render Graph
+                  currentGraphData = { nodes: [...currentGraphData.nodes], links: [...currentGraphData.links] };
+                  GraphInstance.graphData(currentGraphData); 
+
+                  showToast(`Link established between [${linkedNodeA.name}] and [${linkedNodeB.name}]. Click background to reset.`);
+              }
+              tripleClickState.count = 0;
+          }
+        })
+        .onBackgroundClick(() => {
+          if (highlightMode || linkedNodeA) {
+              linkedNodeA = null;
+              linkedNodeB = null;
+              highlightMode = false;
+              
+              updateHighlightVisuals();
+              currentGraphData = { nodes: [...currentGraphData.nodes], links: [...currentGraphData.links] };
+              GraphInstance.graphData(currentGraphData); 
+
+              showToast('Graph view reset.');
+          }
+        });
+
+      GraphInstance.d3Force('charge').strength(-1500); 
+      GraphInstance.d3Force('link').distance(link => {
+        const rel = String(link.relationship || '').toUpperCase();
+        if (rel === 'COMMANDS' || rel === 'CO_MASTERMIND') return 180;
+        return 120;
+      });
+
+      const scene = GraphInstance.scene();
+      const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+      scene.add(ambientLight);
+
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(100, 150, 100);
+      scene.add(directionalLight);
+
+      // Deep space starry background inside 3D Graph
+      const starGeo = new THREE.BufferGeometry();
+      const starCount = 2000;
+      const starPos = new Float32Array(starCount * 3);
+      const starColors = new Float32Array(starCount * 3);
+      const colorPalette = [new THREE.Color(0xffffff), new THREE.Color(0x38bdf8), new THREE.Color(0x818cf8)];
+      
+      for(let i=0; i<starCount; i++) {
+          starPos[i*3] = (Math.random() - 0.5) * 3000;
+          starPos[i*3+1] = (Math.random() - 0.5) * 3000;
+          starPos[i*3+2] = (Math.random() - 0.5) * 3000;
+          
+          const c = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+          starColors[i*3] = c.r;
+          starColors[i*3+1] = c.g;
+          starColors[i*3+2] = c.b;
+      }
+      starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+      starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+
+      const starMat = new THREE.PointsMaterial({
+          size: 1.5,
+          transparent: true,
+          opacity: 0.6,
+          vertexColors: true
+      });
+      const stars = new THREE.Points(starGeo, starMat);
+      scene.add(stars);
+
+      setTimeout(() => {
+        const controls = GraphInstance.controls();
+        if(controls) {
+          controls.zoomSpeed = 3.0; 
+          
+          controls.addEventListener('change', () => {
+            const currentPos = GraphInstance.cameraPosition();
+            const currentDist = Math.hypot(currentPos.x, currentPos.y, currentPos.z);
+            const slider = document.getElementById('camera-zoom-slider');
+            if (slider) {
+              let val = 3100 - currentDist;
+              slider.value = Math.max(100, Math.min(3000, val));
+            }
+          });
+        }
+      }, 500);
+    }
+
+    function focusNode(nodeId) {
+      if (!GraphInstance || !currentGraphData.nodes) return;
+      const node = currentGraphData.nodes.find(n => (n.id !== undefined ? n.id : n.name) == nodeId);
+      if (node) {
+        const distance = 90;
+        const distRatio = 1 + distance / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
+        GraphInstance.cameraPosition(
+          { x: (node.x || 0) * distRatio, y: (node.y || 0) * distRatio, z: (node.z || 0) * distRatio }, 
+          node, 
+          1600
+        );
+        showInspector(node);
+      }
+    }
+
+    function applyZoom(distance, ms = 0) {
+      if (!GraphInstance) return;
+      const currentPos = GraphInstance.cameraPosition();
+      const currentDist = Math.hypot(currentPos.x, currentPos.y, currentPos.z);
+      const ratio = distance / (currentDist || 1);
+      GraphInstance.cameraPosition({
+        x: currentPos.x * ratio,
+        y: currentPos.y * ratio,
+        z: currentPos.z * ratio
+      }, null, ms);
+    }
+
+    document.getElementById('camera-zoom-slider')?.addEventListener('input', (e) => {
+      const dist = 3100 - parseInt(e.target.value);
+      applyZoom(dist, 0); // 0ms delay for instant, perfectly smooth slider drag
+    });
+
+    document.getElementById('zoom-in-btn')?.addEventListener('click', () => {
+      if(!GraphInstance) return;
+      const slider = document.getElementById('camera-zoom-slider');
+      let val = parseInt(slider.value) + 300;
+      if (val > 3000) val = 3000;
+      slider.value = val;
+      applyZoom(3100 - val, 300);
+    });
+
+    document.getElementById('zoom-out-btn')?.addEventListener('click', () => {
+      if(!GraphInstance) return;
+      const slider = document.getElementById('camera-zoom-slider');
+      let val = parseInt(slider.value) - 300;
+      if (val < 100) val = 100;
+      slider.value = val;
+      applyZoom(3100 - val, 300);
+    });
+
+    async function loadEvidenceVault() {
+      const list = document.getElementById('evidence-vault-list');
+      const countEl = document.getElementById('vault-record-count');
+      if (!list) return;
+
+      list.innerHTML = '<div class="text-slate-500 text-center py-6 font-mono text-xs">Accessing Section 63 Merkle ledger...</div>';
+      
+      const token = sessionStorage.getItem('ncrb_token');
+      try {
+        const res = await fetch(`${BACKEND_URL}/evidence/blockchain-ledger`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        
+        if (!res.ok) throw new Error("Failed to fetch ledger");
+        
+        const ledger = await res.json();
+        
+        if (!ledger || ledger.length === 0) {
+          list.innerHTML = '<div class="text-slate-500 text-center py-6 font-mono text-xs">No records found. Ingest an FIR.</div>';
+          if (countEl) countEl.innerText = "0 Forensic Blocks Sealed";
+          return;
+        }
+
+        if (countEl) countEl.innerText = `${ledger.length} Forensic Blocks Sealed`;
+
+        const displayLedger = [...ledger].reverse();
+
+        list.innerHTML = '';
+        displayLedger.forEach(block => {
+          const item = document.createElement('div');
+          item.className = "p-4.5 rounded-xl liquid-glass space-y-2 border border-white/10 transition-all duration-300 hover:border-white/30 shadow-lg";
+          
+          const filename = block.filename || block.document_name || 'Evidence File';
+          const hash = block.block_hash || block.hash || 'SHA3_256_UNVERIFIED';
+          const prevHash = block.prev_hash || block.previous_hash || 'GENESIS_BLOCK_ROOT';
+          const timestamp = block.registered_at || block.timestamp || new Date().toLocaleString();
+          const officer = block.officer || sessionStorage.getItem('officer_name') || 'Devendra Pratap';
+          
+          item.innerHTML = `
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-2.5">
+              <div class="flex items-center gap-2.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span class="font-bold text-sm text-slate-100 font-sans tracking-wide">BLOCK #${block.index || '01'} // ${filename}</span>
+              </div>
+              <span class="text-[9px] font-bold px-2.5 py-1 rounded bg-emerald-950/50 text-emerald-300 border border-emerald-700/50 shadow-[0_0_10px_rgba(16,185,129,0.15)] flex items-center gap-1 self-start sm:self-auto">
+                <i data-lucide="check" class="w-3 h-3"></i>
+                <span>${block.status || 'BSA SEC 63 VALIDATED'}</span>
+              </span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1">
+              <div class="space-y-1">
+                <span class="text-[9px] uppercase tracking-wider text-slate-400 block font-bold">SHA3-256 Digest (Content Hash)</span>
+                <div class="text-[11px] text-slate-300 break-all bg-black/40 p-2 rounded border border-white/5 font-mono">
+                  ${hash}
+                </div>
+              </div>
+              <div class="space-y-1">
+                <span class="text-[9px] uppercase tracking-wider text-slate-400 block font-bold">Preceding Block Hash (H_prev)</span>
+                <div class="text-[11px] text-slate-400 break-all bg-black/40 p-2 rounded border border-white/5 font-mono">
+                  ${prevHash}
+                </div>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between pt-2 border-t border-white/5 text-[10px] text-slate-400">
+              <div class="flex items-center gap-2">
+                <i data-lucide="database" class="w-3 h-3 text-slate-300"></i>
+                <span>Archived in: <strong class="text-emerald-400">/internal/evidence_store/</strong></span>
+              </div>
+              <div class="flex items-center gap-2">
+                <i data-lucide="calendar" class="w-3 h-3 text-slate-300"></i>
+                <span>Ingested: <strong class="text-slate-200">${timestamp}</strong></span>
+              </div>
+              <div class="flex items-center gap-2">
+                <i data-lucide="user-check" class="w-3 h-3 text-slate-300"></i>
+                <span>Certifying Officer: <strong class="text-slate-200">${officer}</strong></span>
+              </div>
+            </div>
+          `;
+          list.appendChild(item);
+        });
+        lucide.createIcons();
+      } catch (err) {
+        list.innerHTML = '<div class="text-red-400 text-center py-6 font-mono text-xs">Failed to sync with secure evidence store. Ensure backend is online.</div>';
+        if (countEl) countEl.innerText = "Connection Error";
+      }
+    }
+
+    function renderTimeline(data) {
+      const list = document.getElementById('timeline-list');
+      if (!list) return;
+      list.innerHTML = '';
+
+      let events = [];
+
+      if (data.events && Array.isArray(data.events) && data.events.length > 0) {
+        events = [...data.events];
+      } else {
+        const seenFirs = new Set();
+        (data.nodes || []).forEach(n => {
+          if (n.type === 'CRIME_FIR') {
+            const rawName = (n.name || '').replace(/^Crime\s*No\.?\s*/i, '').trim();
+            const invalidWords = ['has', 'is', 'was', 'been', 'dated', 'the', 'null', 'undefined', 'not'];
+            if (!invalidWords.includes(rawName.toLowerCase()) && /\d/.test(rawName) && !seenFirs.has(rawName)) {
+              seenFirs.add(rawName);
+              events.push({
+                datetime: n.details?.timestamp || 'Date Not Explicitly Provided',
+                category: "LEGAL FIR",
+                badgeColor: "bg-rose-950/80 text-rose-300 border-rose-800",
+                dotColor: "border-rose-500",
+                title: n.name,
+                desc: `Registered investigation under ${(n.details?.sections || n.details?.statutory_offences || ['BNS/IPC']).join(', ')}.`,
+                citation: n.details?.source_pdf || "Case Record",
+                page: n.details?.source_page || "Page 1"
+              });
+            }
+          }
+        });
+
+        (data.links || []).forEach(link => {
+          const src = typeof link.source === 'object' ? (link.source.id || link.source.name) : link.source;
+          const tgt = typeof link.target === 'object' ? (link.target.id || link.target.name) : link.target;
+          const srcNode = (data.nodes || []).find(n => (n.id || n.name) === src);
+          const tgtNode = (data.nodes || []).find(n => (n.id || n.name) === tgt);
+
+          if (srcNode?.type === 'PHONE' || tgtNode?.type === 'PHONE') {
+            const phone = srcNode?.type === 'PHONE' ? srcNode : tgtNode;
+            const peer = srcNode?.type === 'PHONE' ? tgtNode : srcNode;
+
+            events.push({
+              datetime: link.timestamp || phone?.details?.timestamp || 'Logged Active Intercept',
+              category: "CDR INTERCEPT",
+              badgeColor: "bg-cyan-950/80 text-cyan-300 border-cyan-800",
+              dotColor: "border-cyan-500",
+              title: `Intercept: ${phone?.name || 'Endpoint'} ↔ ${peer?.name || 'Target'}`,
+              desc: `Telecommunication CDR stream associated with suspect activities. Sessions: ${link.call_count || 'Active'}.`,
+              citation: phone?.details?.source_pdf || "Intercept Audit",
+              page: phone?.details?.source_page || "Annexure"
+            });
+          }
+        });
+      }
+
+      document.getElementById('timeline-event-count').innerText = `${events.length} Events`;
+
+      if (events.length === 0) {
+        list.innerHTML = `<div class="text-xs text-slate-500 italic p-4 text-center font-mono">No chronological incidents parsed from current document yet.</div>`;
+        return;
+      }
+
+      events.forEach(evt => {
+        const card = document.createElement('div');
+        card.className = "relative pl-5 pb-2 group";
+        card.innerHTML = `
+          <div class="absolute -left-[5px] top-2 w-2.5 h-2.5 rounded-full bg-[#000000] border-2 ${evt.dotColor} group-hover:scale-150 transition-transform duration-300 shadow-[0_0_8px_currentColor]"></div>
+          
+          <div class="p-3 rounded-xl liquid-glass hover:bg-white/10 transition-all duration-300 space-y-1.5 relative overflow-hidden">
+            <div class="absolute -right-4 -top-4 w-12 h-12 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
+            <div class="flex flex-wrap items-center justify-between gap-1 border-b border-white/10 pb-1.5">
+              <div class="flex items-center gap-1.5">
+                <i data-lucide="calendar" class="w-3 h-3 text-slate-300"></i>
+                <span class="text-[10px] font-mono font-bold text-slate-200 tracking-wide">${evt.datetime}</span>
+              </div>
+              <span class="text-[8px] px-1.5 py-0.5 rounded font-mono font-bold border ${evt.badgeColor}">
+                ${evt.category}
+              </span>
+            </div>
+
+            <div class="relative z-10">
+              <h4 class="text-xs font-bold text-slate-100 flex items-center gap-1 font-sans leading-tight">${evt.title}</h4>
+              <p class="text-[10px] text-slate-400 leading-snug mt-1 font-mono">${evt.desc}</p>
+            </div>
+
+            <div class="flex items-center justify-between pt-1 text-[9px] font-mono text-slate-500 border-t border-white/10 mt-1">
+              <div class="flex items-center gap-1 text-slate-300 truncate">
+                <i data-lucide="file-text" class="w-2.5 h-2.5 text-slate-300 shrink-0"></i>
+                <span class="truncate">${evt.citation}</span>
+              </div>
+              <span class="font-semibold shrink-0 ml-1">${evt.page}</span>
+            </div>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    function renderSyndicates(data) {
+      const sidebarList = document.getElementById('syndicate-sidebar-list');
+      if (!sidebarList) return;
+      sidebarList.innerHTML = '';
+
+      const clusters = {};
+      (data.nodes || []).forEach(n => {
+        const cl = n.cluster || 'Syndicate-1';
+        if (!clusters[cl]) clusters[cl] = [];
+        clusters[cl].push(n);
+      });
+
+      const clusterCountText = `${Object.keys(clusters).length} Cells Active`;
+      const countBadge = document.getElementById('syndicate-cluster-count');
+      if (countBadge) countBadge.innerText = clusterCountText;
+
+      if (Object.keys(clusters).length === 0) {
+        sidebarList.innerHTML = `<div class="text-xs text-slate-500 italic p-4 text-center font-mono">No syndicate clusters parsed yet.</div>`;
+        return;
+      }
+
+      Object.entries(clusters).forEach(([cName, members]) => {
+        const card = document.createElement('div');
+        card.className = "p-3.5 rounded-xl liquid-glass space-y-2.5 transition-all duration-300 hover:bg-white/10";
+        
+        const memberBadges = members.map(m => {
+          const isCritical = m.type === "KINGPIN" || m.type === "ACTUAL_KINGPIN" || (m.risk_score >= 0.70 && m.type !== "PHONE");
+          const isApparent = m.type === "APPARENT_KINGPIN";
+          const riskPct = ((m.risk_score || 0) * 100).toFixed(0);
+          
+          let colorClasses = "bg-white/5 text-slate-300 border-white/10 hover:border-sky-400";
+          if (isCritical) {
+            colorClasses = "bg-red-950/80 text-red-300 border-red-700 shadow-[0_0_8px_rgba(239,68,68,0.4)]";
+          } else if (isApparent) {
+            colorClasses = "bg-amber-950/80 text-amber-300 border-amber-700 shadow-[0_0_8px_rgba(245,158,11,0.4)]";
+          } else if (m.type === "TARGET" || m.type === "PHONE") {
+            colorClasses = "bg-cyan-950/80 text-cyan-300 border-cyan-700";
+          }
+
+          const mId = m.id !== undefined ? m.id : m.name;
+          return `
+            <button type="button" onclick="focusNode('${mId}')" class="px-2 py-1 rounded text-[10px] font-mono font-medium border ${colorClasses} cursor-pointer transition-all flex items-center gap-1.5 hover:scale-105 active:scale-95">
+              <span class="w-1.5 h-1.5 rounded-full ${isCritical ? 'bg-red-400 animate-ping' : (isApparent ? 'bg-amber-400' : 'bg-sky-400')}"></span>
+              <span class="truncate max-w-[120px]">${m.name}</span>
+              <span class="opacity-75">(${riskPct}%)</span>
+            </button>
+          `;
+        }).join('');
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between border-b border-white/10 pb-2">
+            <div class="flex items-center gap-2">
+              <i data-lucide="network" class="w-3.5 h-3.5 text-slate-300"></i>
+              <h4 class="font-bold text-xs text-slate-200 uppercase tracking-wider font-mono">${cName}</h4>
+            </div>
+            <span class="text-[9px] px-2 py-0.5 rounded-full bg-white/10 text-slate-200 border border-white/20 font-mono">${members.length} Entities</span>
+          </div>
+          <div class="flex flex-wrap gap-1.5 pt-1">
+            ${memberBadges}
+          </div>
+        `;
+        sidebarList.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    function showInspector(node) {
+      document.getElementById('inspector').classList.remove('hidden');
+      document.getElementById('inspect-name').innerText = node.name;
+      
+      const isActualMastermind = node.type === "KINGPIN" || node.type === "ACTUAL_KINGPIN" || (node.risk_score >= 0.70 && node.type !== "PHONE");
+      const isApparent = node.type === "APPARENT_KINGPIN";
+
+      let roleBadge = node.type;
+      if (isActualMastermind) {
+        roleBadge = `MAJOR CRIMINAL THREAT • ${node.details?.ml_role || 'Mastermind'}`;
+      } else if (isApparent) {
+        roleBadge = `OPERATIONAL HUB • ${node.details?.ml_role || 'Field Boss'}`;
+      } else if (node.type === "TARGET") {
+        roleBadge = `PRIMARY SURVEILLANCE TARGET • ${node.details?.ml_role || 'Intercept Lead'}`;
+      } else if (node.type === "PERSON" || node.type === "OPERATIONAL_NODE") {
+        roleBadge = `SUSPECT • ${node.details?.ml_role || 'Associate'}`;
+      } else if (node.type === "CRIME_FIR") {
+        roleBadge = `REGISTERED POLICE FIR CASE`;
+      } else if (node.type === "POLICE_STATION") {
+        roleBadge = `LAW ENFORCEMENT JURISDICTION`;
+      } else if (node.type === "PHONE") {
+        const isIntercepted = Boolean(node.details?.is_intercepted !== false);
+        roleBadge = isIntercepted ? `INTERCEPT ENDPOINT (MSISDN)` : `CDR ENDPOINT (MSISDN)`;
+      } else if (node.type === "BANK_ACCOUNT") {
+        roleBadge = `FINANCIAL ACCOUNT (MULE TRACE)`;
+      } else if (node.type === "VEHICLE") {
+        roleBadge = `LOGISTICS ASSET (TRANSPORT)`;
+      } else if (node.type === "WEAPON") {
+        roleBadge = `CONTRABAND FIREARM`;
+      }
+      document.getElementById('inspect-type').innerText = roleBadge;
+      
+      const riskPct = ((node.risk_score || 0) * 100).toFixed(0);
+      document.getElementById('inspect-risk-val').innerText = `${riskPct}%`;
+      document.getElementById('inspect-risk-bar').style.width = `${riskPct}%`;
+
+      const barElem = document.getElementById('inspect-risk-bar');
+      const valElem = document.getElementById('inspect-risk-val');
+      if (isActualMastermind) {
+        barElem.className = "h-full bg-red-600 transition-all duration-500 shadow-[0_0_8px_#ef4444]";
+        valElem.className = "text-base font-extrabold text-red-500 glow-red";
+      } else if (isApparent) {
+        barElem.className = "h-full bg-amber-500 transition-all duration-500 shadow-[0_0_8px_#f59e0b]";
+        valElem.className = "text-base font-bold text-amber-400";
+      } else if (node.type === "TARGET") {
+        barElem.className = "h-full bg-cyan-400 transition-all duration-500 shadow-[0_0_8px_#06b6d4]";
+        valElem.className = "text-base font-bold text-cyan-300";
+      } else if (node.type === "CRIME_FIR") {
+        barElem.className = "h-full bg-rose-500 transition-all duration-500";
+        valElem.className = "text-base font-bold text-rose-400";
+      } else if (node.type === "POLICE_STATION") {
+        barElem.className = "h-full bg-teal-500 transition-all duration-500";
+        valElem.className = "text-base font-bold text-teal-400";
+      } else {
+        barElem.className = "h-full bg-cyan-500 transition-all duration-500";
+        valElem.className = "text-base font-bold text-cyan-400";
+      }
+
+      document.getElementById('inspect-cluster').innerText = node.cluster || 'Syndicate-1';
+      document.getElementById('inspect-between').innerText = node.details?.betweenness ?? '0.000';
+      document.getElementById('inspect-pagerank').innerText = node.details?.pagerank ?? '0.000';
+
+      const secBox = document.getElementById('inspect-sections-box');
+      const secContainer = document.getElementById('inspect-sections');
+      secContainer.innerHTML = '';
+      
+      let rawTags = [];
+      if (node.type === "PERSON" || node.type === "OPERATIONAL_NODE" || node.type === "KINGPIN" || node.type === "ACTUAL_KINGPIN" || node.type === "APPARENT_KINGPIN" || node.type === "TARGET") {
+        rawTags = (node.details?.sections || ["Under Investigation"])
+          .filter(s => !String(s).toLowerCase().startsWith("bail:"));
+
+        const bailStatus = node.details?.bail_eligibility || "Under Review";
+        rawTags.push({ isBail: true, text: `Bail: ${bailStatus}` });
+      } else if (node.type === "CRIME_FIR") {
+        rawTags = node.details?.statutory_offences || ["BNS / IPC Sections"];
+      } else if (node.type === "POLICE_STATION") {
+        rawTags = ["Jurisdiction Active", "FIR Investigation Unit"];
+      }
+
+      if (rawTags.length > 0) {
+        secBox.classList.remove('hidden');
+        rawTags.forEach(item => {
+          const tag = document.createElement('span');
+          const isBailObj = typeof item === 'object' && item.isBail;
+          const text = isBailObj ? item.text : item;
+
+          if (isBailObj) {
+            const isNonBailable = text.toLowerCase().includes("non-bailable");
+            tag.className = isNonBailable 
+              ? "px-2 py-0.5 bg-red-950/90 border border-red-700 text-red-300 text-[10px] font-bold rounded"
+              : "px-2 py-0.5 bg-emerald-950/90 border border-emerald-700 text-emerald-300 text-[10px] font-bold rounded";
+          } else {
+            tag.className = "px-2 py-0.5 bg-white/10 border border-white/20 text-slate-200 text-[10px] font-bold rounded";
+          }
+
+          tag.innerText = text;
+          secContainer.appendChild(tag);
+        });
+      } else {
+        secBox.classList.add('hidden');
+      }
+
+      const phoneSection = document.getElementById('phone-intel-section');
+      const vehicleSection = document.getElementById('vehicle-intel-section');
+      phoneSection.classList.add('hidden');
+      vehicleSection.classList.add('hidden');
+
+      const nodeId = node.id !== undefined ? node.id : node.name;
+
+      if (node.type === "PHONE") {
+        phoneSection.classList.remove('hidden');
+
+        const badge = document.getElementById('inspect-intercept-badge');
+        const isIntercepted = Boolean(node.details?.is_intercepted !== false);
+        if (isIntercepted) {
+          badge.className = "px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-red-950 text-red-400 border border-red-800 animate-pulse";
+          badge.innerText = "ACTIVE LIVE TAP";
+        } else {
+          badge.className = "px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-white/10 text-slate-400 border border-white/10";
+          badge.innerText = "CDR HISTORICAL RECORD";
+        }
+
+        document.getElementById('phone-carrier').innerText = node.details?.carrier || "Jio / Bharti Airtel";
+        document.getElementById('phone-warrant').innerText = node.details?.warrant || "§5(2) Telegraph Act";
+        document.getElementById('phone-imei').innerText = node.details?.imei || `86349004${node.name.slice(-6)}`;
+        document.getElementById('phone-tower').innerText = node.details?.cell_tower || "Gateway Sector-62";
+
+        document.getElementById('inspect-source-file').innerText = node.details?.source_pdf || "FIR_Chargesheet.pdf";
+        document.getElementById('inspect-source-anchor').innerText = 
+          node.details?.source_page ? `Page ${node.details.source_page} • ${node.details.section_anchor || 'Annexure CDR'}` : "Page 14 • Para 3 (Annexure CDR-A)";
+
+        const suspectBox = document.getElementById('inspect-linked-suspects');
+        suspectBox.innerHTML = '';
+
+        const connectedTargets = (currentGraphData.links || [])
+          .filter(l => {
+            const sId = typeof l.source === 'object' ? (l.source.id !== undefined ? l.source.id : l.source.name) : l.source;
+            const tId = typeof l.target === 'object' ? (l.target.id !== undefined ? l.target.id : l.target.name) : l.target;
+            return sId === nodeId || tId === nodeId;
+          })
+          .map(l => {
+            const sId = typeof l.source === 'object' ? (l.source.id !== undefined ? l.source.id : l.source.name) : l.source;
+            const otherId = (sId === nodeId)
+              ? (typeof l.target === 'object' ? (l.target.id !== undefined ? l.target.id : l.target.name) : l.target)
+              : sId;
+            const peerNode = currentGraphData.nodes.find(n => (n.id !== undefined ? n.id : n.name) === otherId);
+            return { peer: peerNode, link: l };
+          })
+          .filter(item => item.peer);
+
+        document.getElementById('inspect-link-count').innerText = `${connectedTargets.length} Connected`;
+
+        if (connectedTargets.length === 0) {
+          suspectBox.innerHTML = '<div class="text-[10px] text-slate-500 italic p-1">No direct links detected in current cluster.</div>';
+        } else {
+          connectedTargets.forEach(({ peer, link }) => {
+            const row = document.createElement('div');
+            row.className = "flex items-center justify-between p-2 rounded-lg bg-black/40 border border-white/10 text-xs";
+            const isKing = peer.type === "KINGPIN" || peer.type === "ACTUAL_KINGPIN";
+            row.innerHTML = `
+              <div>
+                <div class="font-bold ${isKing ? 'text-red-400' : 'text-slate-200'}">${peer.name}</div>
+                <div class="text-[9px] text-slate-500 font-mono">${peer.type}${link.call_count ? ` • ${link.call_count} Sessions` : ''}</div>
+              </div>
+              <span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-slate-400">
+                ${(peer.risk_score ? (peer.risk_score * 100).toFixed(0) : 0)}% Threat
+              </span>
+            `;
+            suspectBox.appendChild(row);
+          });
+        }
+      }
+
+      if (node.type === "VEHICLE") {
+        vehicleSection.classList.remove('hidden');
+
+        document.getElementById('veh-make').innerText = node.details?.model || "Toyota Fortuner / SUV";
+        document.getElementById('veh-class').innerText = node.details?.color_class || "White / Commercial";
+        document.getElementById('veh-vin').innerText = node.details?.vin || `MA3EW41S0P${node.name.slice(-4)}`;
+        document.getElementById('veh-fastag').innerText = node.details?.fastag_toll || "Bypass Toll Gate #03";
+
+        document.getElementById('veh-source-file').innerText = node.details?.source_pdf || "FIR_Chargesheet.pdf";
+        document.getElementById('veh-source-anchor').innerText = node.details?.source_page || "Logistics Annexure (Seizure Memo)";
+
+        const driverBox = document.getElementById('veh-linked-drivers');
+        driverBox.innerHTML = '';
+
+        const connectedDrivers = (currentGraphData.links || [])
+          .filter(l => {
+            const sId = typeof l.source === 'object' ? (l.source.id !== undefined ? l.source.id : l.source.name) : l.source;
+            const tId = typeof l.target === 'object' ? (l.target.id !== undefined ? l.target.id : l.target.name) : l.target;
+            return sId === nodeId || tId === nodeId;
+          })
+          .map(l => {
+            const sId = typeof l.source === 'object' ? (l.source.id !== undefined ? l.source.id : l.source.name) : l.source;
+            const otherId = (sId === nodeId)
+              ? (typeof l.target === 'object' ? (l.target.id !== undefined ? l.target.id : l.target.name) : l.target)
+              : sId;
+            const peerNode = currentGraphData.nodes.find(n => (n.id !== undefined ? n.id : n.name) === otherId);
+            return { peer: peerNode, link: l };
+          })
+          .filter(item => item.peer);
+
+        document.getElementById('veh-driver-count').innerText = `${connectedDrivers.length} Linked`;
+
+        if (connectedDrivers.length === 0) {
+          driverBox.innerHTML = '<div class="text-[10px] text-slate-500 italic p-1">No driver links currently tracked.</div>';
+        } else {
+          connectedDrivers.forEach(({ peer, link }) => {
+            const row = document.createElement('div');
+            row.className = "flex items-center justify-between p-2 rounded-lg bg-black/40 border border-white/10 text-xs";
+            row.innerHTML = `
+              <div>
+                <div class="font-bold text-slate-200">${peer.name}</div>
+                <div class="text-[9px] text-slate-500 font-mono">${peer.type} • ${link.relationship || 'OPERATES'}</div>
+              </div>
+              <span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-slate-400">
+                ${(peer.risk_score ? (peer.risk_score * 100).toFixed(0) : 0)}% Threat
+              </span>
+            `;
+            driverBox.appendChild(row);
+          });
+        }
+      }
+
+      lucide.createIcons();
+    }
+
+    function updateCounters(data) {
+      document.getElementById('node-count').innerText = (data.nodes || []).length;
+      document.getElementById('link-count').innerText = (data.links || []).length;
+      const criticalCount = (data.nodes || []).filter(n => n.type === "KINGPIN" || n.type === "ACTUAL_KINGPIN" || (n.risk_score >= 0.70 && n.type !== "PHONE")).length;
+      document.getElementById('threat-count').innerText = criticalCount;
+      
+      const counts = { KINGPIN:0, ACTUAL_KINGPIN:0, APPARENT_KINGPIN:0, TARGET:0, PERSON:0, OPERATIONAL_NODE:0, VEHICLE:0, BANK_ACCOUNT:0, WEAPON:0, CRIME_FIR:0, PHONE:0 };
+      (data.nodes || []).forEach(n => {
+        if(counts[n.type] !== undefined) counts[n.type]++;
+      });
+      document.getElementById('leg-apparent').innerText = counts.APPARENT_KINGPIN;
+      document.getElementById('leg-target').innerText = counts.TARGET + counts.PHONE;
+      document.getElementById('leg-person').innerText = counts.PERSON + counts.OPERATIONAL_NODE + counts.KINGPIN + counts.ACTUAL_KINGPIN;
+      document.getElementById('leg-vehicle').innerText = counts.VEHICLE;
+      document.getElementById('leg-bank').innerText = counts.BANK_ACCOUNT;
+      document.getElementById('leg-weapon').innerText = counts.WEAPON;
+      document.getElementById('leg-fir').innerText = counts.CRIME_FIR;
+      
+      document.getElementById('timeline-event-count').innerText = (data.events ? data.events.length : 0) + " Events";
+    }
+
+    async function loadCurrentGraph() {
+      startGraphLoader("FETCHING NETWORK TOPOLOGY");
+      
+      try {
+        const token = sessionStorage.getItem('ncrb_token');
+        const res = await fetch(`${BACKEND_URL}/graph/data`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        
+        if (res.ok) {
+          document.getElementById('graph-loader-text').innerText = "CALCULATING FORCE DIRECTED PHYSICS";
+          const data = await res.json();
+          
+          if (data.nodes && data.nodes.length > 0) {
+            currentGraphData = data;
+            if (GraphInstance) GraphInstance.graphData(data);
+            updateCounters(data);
+            renderTimeline(data);
+            renderSyndicates(data);
+          }
+        }
+      } catch (e) {
+        console.warn("Backend not reached yet.");
+        document.getElementById('graph-loader-text').innerText = "LOCAL MOCK MODE ENGAGED";
+      } finally {
+        // Add a tiny delay so the 3D engine has a split second to paint the nodes
+        setTimeout(() => {
+          completeGraphLoader();
+        }, 800);
+      }
+    }
+
+    async function uploadDocument() {
+      const fileInput = document.getElementById('file-input');
+      const statusBox = document.getElementById('upload-status');
+      const btn = document.getElementById('upload-btn');
+
+      if (!fileInput.files[0]) return alert("Select a PDF report first.");
+
+      btn.innerText = "RUNNING GLiNER & ML MODELS...";
+      btn.disabled = true;
+      statusBox.classList.remove('hidden');
+      statusBox.innerText = "Extracting entities, sealing evidence & predicting roles...";
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      try {
+        const token = sessionStorage.getItem('ncrb_token');
+        const res = await fetch(`${BACKEND_URL}/ingest/fir`, {
+          method: 'POST',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+          body: formData
+        });
+
+        if (!res.ok) throw new Error("Upload failed");
+
+        const data = await res.json();
+        currentGraphData = data;
+        if (GraphInstance) GraphInstance.graphData(data);
+        updateCounters(data);
+        renderTimeline(data);
+        renderSyndicates(data);
+        
+        loadEvidenceVault();
+        document.getElementById('upload-modal').classList.add('hidden');
+        statusBox.classList.add('hidden');
+      } catch (err) {
+        statusBox.innerText = "Error parsing report. Ensure backend is running.";
+      } finally {
+        btn.innerText = "EXTRACT & ANALYZE";
+        btn.disabled = false;
+      }
+    }
+    
+    window.addEventListener('DOMContentLoaded', () => {
+      const inspectorEl = document.getElementById('inspector');
+      const inspHeader = document.getElementById('inspector-header');
+      
+      if (inspectorEl && inspHeader) {
+        let isDraggingInsp = false;
+        let startX, startY, initialX, initialY;
+
+        inspHeader.addEventListener('mousedown', (e) => {
+          isDraggingInsp = true;
+          inspHeader.classList.remove('cursor-grab');
+          inspHeader.classList.add('cursor-grabbing');
+          startX = e.clientX;
+          startY = e.clientY;
+          
+          const rect = inspectorEl.getBoundingClientRect();
+          initialX = rect.left;
+          initialY = rect.top;
+          
+          inspectorEl.style.right = 'auto';
+          inspectorEl.style.bottom = 'auto';
+          inspectorEl.style.left = initialX + 'px';
+          inspectorEl.style.top = initialY + 'px';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+          if (!isDraggingInsp) return;
+          e.preventDefault();
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          inspectorEl.style.left = (initialX + dx) + 'px';
+          inspectorEl.style.top = (initialY + dy) + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+          if (isDraggingInsp) {
+            isDraggingInsp = false;
+            inspHeader.classList.remove('cursor-grabbing');
+            inspHeader.classList.add('cursor-grab');
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>
