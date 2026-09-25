@@ -1,3 +1,6 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.2.1+cpu
+torchvision==0.17.1+cpu
 fastapi>=0.111.0
 uvicorn[standard]>=0.30.0
 pydantic>=2.7.0
@@ -5,7 +8,6 @@ python-multipart>=0.0.9
 pdfplumber>=0.11.0
 pymupdf>=1.24.0
 pytesseract>=0.3.10
-torch>=2.2.0
 gliner>=0.2.7
 networkx>=3.3
 python-louvain>=0.16
